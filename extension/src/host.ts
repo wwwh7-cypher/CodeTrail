@@ -21,6 +21,7 @@ export interface ScanOptions {review?:boolean;base?:string;head?:string;root?:st
 export class CodeTrailHost implements vscode.Disposable {
   panel?:vscode.WebviewPanel;graph?:Graph;root='';storage='';graphPath='';htmlPath='';stale=false;webviewReady=false;panelGeneration=0;
   private running?:Promise<unknown>;private watcher?:vscode.FileSystemWatcher;private refreshTimer?:NodeJS.Timeout;private configTimer?:NodeJS.Timeout;private persistQueue:Promise<void>=Promise.resolve();private disposed=false;
+  private sourceColumn=vscode.window.activeTextEditor?.viewColumn;
   private readonly output=vscode.window.createOutputChannel('CodeTrail');private readonly status=vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,30);
   private readonly metrics:LocalMetrics;private readonly disposables:vscode.Disposable[]=[];private draftId=0; private pendingMode=''; private lastOptions:ScanOptions={}; private sourceRevision=0;
   private aborters=new Set<AbortController>();private snippets=new Map<string,string>();private semanticCache=new Map<string,Awaited<ReturnType<typeof semanticNeighbors>>>();private pendingFocus='';
@@ -29,6 +30,7 @@ export class CodeTrailHost implements vscode.Disposable {
     this.status.text='$(type-hierarchy) CodeTrail';this.status.command='codeTrail.open';this.status.tooltip='架构导览与静态修改影响面';this.status.show();
     this.disposables.push(vscode.workspace.registerTextDocumentContentProvider('code-trail-baseline',{provideTextDocumentContent:uri=>this.snippets.get(uri.toString())||'Baseline excerpt unavailable.'}));
     void this.metrics.bump('activations');
+    this.disposables.push(vscode.window.onDidChangeActiveTextEditor(editor=>{if(editor?.viewColumn&&editor.document.uri.scheme==='file')this.sourceColumn=editor.viewColumn;}));
     this.disposables.push(vscode.workspace.onDidChangeTextDocument(e=>{if(e.document.isDirty&&this.root&&inside(this.root,e.document.uri.fsPath)){this.stale=true;this.sourceRevision++;this.semanticCache.clear();void this.send({type:'stale'});}}));
     this.disposables.push(vscode.workspace.onDidChangeConfiguration(e=>{if(e.affectsConfiguration('codeTrail.entries')&&this.graph){this.stale=true;void this.send({type:'stale'});}if(['provider','apiBaseUrl','model'].some(k=>e.affectsConfiguration('codeTrail.'+k))){clearTimeout(this.configTimer);this.configTimer=setTimeout(()=>void this.refreshNarratives().catch(err=>this.send({type:'error',message:errorText(err)})),150);}}));
   }
@@ -68,7 +70,7 @@ export class CodeTrailHost implements vscode.Disposable {
   private openPanel(){
     if(!this.graph)return;
     if(!this.panel){this.panel=vscode.window.createWebviewPanel('codeTrail','CodeTrail · '+this.graph.project,vscode.ViewColumn.Beside,{enableScripts:true,retainContextWhenHidden:true,localResourceRoots:[]});this.panel.onDidDispose(()=>{this.panel=undefined;this.webviewReady=false;for(const a of this.aborters)a.abort();});this.panel.webview.onDidReceiveMessage(message=>{void this.handle(message).catch(async e=>{await this.metrics.bump('errors');await this.send({type:'error',message:errorText(e)});});});}
-    this.panel.title='CodeTrail · '+this.graph.project;this.webviewReady=false;this.panelGeneration++;this.panel.webview.html=this.webviewHtml(this.graph);this.panel.reveal(vscode.ViewColumn.Beside,true);
+    this.panel.title='CodeTrail · '+this.graph.project;this.webviewReady=false;this.panelGeneration++;this.panel.webview.html=this.webviewHtml(this.graph);this.panel.reveal(undefined,true);
   }
   private webviewHtml(graph:Graph){
     const template=require('node:fs').readFileSync(this.context.asAbsolutePath('media/viewer.html'),'utf8') as string;
@@ -101,7 +103,7 @@ export class CodeTrailHost implements vscode.Disposable {
     if(!this.graph||this.stale||canonicalPath(this.root)!==canonicalPath(folder.uri.fsPath))await this.scan({root:folder.uri.fsPath});
     const file=path.relative(this.root,editor.document.uri.fsPath).split(path.sep).join('/'),line=editor.selection.active.line+1;
     const node=this.graph!.nodes.filter(n=>n.file===file&&n.kind!=='module'&&n.line<=line&&n.end_line>=line).sort((a,b)=>(a.end_line-a.line)-(b.end_line-b.line))[0];
-    if(!node)throw new Error('光标处没有已索引函数');if(!this.panel)this.openPanel();this.pendingFocus=node.id;this.panel?.reveal(vscode.ViewColumn.Beside,true);if(this.webviewReady){await this.send({type:'focus',id:node.id});this.pendingFocus='';}return node.id;
+    if(!node)throw new Error('光标处没有已索引函数');if(!this.panel)this.openPanel();this.pendingFocus=node.id;this.panel?.reveal(undefined,true);if(this.webviewReady){await this.send({type:'focus',id:node.id});this.pendingFocus='';}return node.id;
   }
   async importClaim(source:'clipboard'|'file'){
     if(!this.graph)await this.scan();let text='';if(source==='clipboard')text=await vscode.env.clipboard.readText();else{const files=await vscode.window.showOpenDialog({canSelectMany:false,filters:{'Agent 声明':['md','txt','json']}});if(!files?.length)return;const stat=await vscode.workspace.fs.stat(files[0]);if(stat.size>32_768)throw new Error('声明文件不能超过 32 KiB');text=Buffer.from(await vscode.workspace.fs.readFile(files[0])).toString('utf8');}
@@ -115,8 +117,6 @@ export class CodeTrailHost implements vscode.Disposable {
   private async refreshNarratives(){if(!this.graph||this.disposed||this.running)return;const notes=this.graph.viewer?.annotations||{};for(const id of Object.keys(notes))if(notes[id].source==='byok-model')delete notes[id];await this.applyCachedRoles();await this.persistGraph();await this.send({type:'annotations',annotations:this.graph.viewer?.annotations||{}});}
   private async narrate(ids:string[]){
     await this.current();const graph=this.graph!;const nodes=ids.map(id=>graph.nodes.find(n=>n.id===id));if(nodes.some(n=>!n)||!nodes.length||nodes.length>12)throw new Error('请选择当前图中的 1–12 个函数');const config=this.apiConfig();const key=await this.context.secrets.get(keyScope(config));if(!key)throw new Error('请先在 API 设置中保存 API Key');
-    const bytes=Buffer.byteLength(nodes.map(n=>n!.source.slice(0,4000)).join(''),'utf8');
-    const yes=await vscode.window.showInformationMessage('生成所选函数的职责叙述',{modal:true,detail:`将 ${nodes.length} 个函数的源码片段（约 ${bytes.toLocaleString()} 字节）发送到 ${new URL(config.apiBaseUrl).origin}，模型 ${config.model||'未设置'}。返回内容仅用于叙述。`},'发送并生成');if(yes!=='发送并生成')return;
     const controller=new AbortController();this.aborters.add(controller);
     try{const roles=await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:'CodeTrail：生成职责叙述',cancellable:true},async(_,token)=>{const subscription=token.onCancellationRequested(()=>controller.abort());try{return await generateRoles(config,key,nodes as NodeInfo[],controller.signal,graph.snapshot);}finally{subscription.dispose();}});
       if(this.graph!==graph||this.stale||this.running)throw new Error('生成期间代码已变化；结果未应用，请重新扫描');let cache:Record<string,Narrative>={};try{cache=JSON.parse(await fs.readFile(path.join(this.storage,'roles.json'),'utf8'));}catch{}
@@ -128,8 +128,12 @@ export class CodeTrailHost implements vscode.Disposable {
   }
   async exportMcp(){if(!this.graph)await this.scan();const config={mcpServers:{'code-trail':{command:this.binary(),args:['mcp','--graph',this.graphPath,'--store',path.join(this.storage,'memory')]}}};const document=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(config,null,2)});await vscode.window.showTextDocument(document,vscode.ViewColumn.Beside);return config;}
   async metricsReport(){const report=this.metrics.report();const doc=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(report,null,2)});await vscode.window.showTextDocument(doc,vscode.ViewColumn.Beside);return report;}
-  private async openSource(id:string,baseline:boolean){const graph=baseline?this.graph?.review?.before_graph:this.graph;const node=graph?.nodes.find(n=>n.id===id);if(!node)throw new Error('函数不属于当前快照');if(baseline){const uri=vscode.Uri.parse('code-trail-baseline:/'+encodeURIComponent(node.id));this.snippets.set(uri.toString(),`// BASELINE EXCERPT · ${node.file}:${node.line}\n${node.source}`);return vscode.window.showTextDocument(uri,{viewColumn:vscode.ViewColumn.One});}
-    const file=path.resolve(this.root,node.file);if(!inside(this.root,file))throw new Error('源码路径超出项目');const real=await fs.realpath(file);if(!inside(await fs.realpath(this.root),real))throw new Error('源码路径超出项目');const doc=await vscode.workspace.openTextDocument(vscode.Uri.file(real));return vscode.window.showTextDocument(doc,{viewColumn:vscode.ViewColumn.One,selection:new vscode.Range(Math.max(0,node.line-1),0,Math.max(0,node.line-1),0)});
+  private sourceViewColumn(){
+    const groups=vscode.window.tabGroups.all.filter(g=>g.viewColumn!==this.panel?.viewColumn);
+    return groups.find(g=>g.viewColumn===this.sourceColumn)?.viewColumn||groups[0]?.viewColumn||vscode.ViewColumn.Beside;
+  }
+  private async openSource(id:string,baseline:boolean){const graph=baseline?this.graph?.review?.before_graph:this.graph;const node=graph?.nodes.find(n=>n.id===id);if(!node)throw new Error('函数不属于当前快照');if(baseline){const uri=vscode.Uri.parse('code-trail-baseline:/'+encodeURIComponent(node.id));this.snippets.set(uri.toString(),`// BASELINE EXCERPT · ${node.file}:${node.line}\n${node.source}`);return vscode.window.showTextDocument(uri,{viewColumn:this.sourceViewColumn()});}
+    const file=path.resolve(this.root,node.file);if(!inside(this.root,file))throw new Error('源码路径超出项目');const real=await fs.realpath(file);if(!inside(await fs.realpath(this.root),real))throw new Error('源码路径超出项目');const doc=await vscode.workspace.openTextDocument(vscode.Uri.file(real));return vscode.window.showTextDocument(doc,{viewColumn:this.sourceViewColumn(),selection:new vscode.Range(Math.max(0,node.line-1),0,Math.max(0,node.line-1),0)});
   }
   private async sendReviewStates(){if(this.graph)await this.send({type:'reviewStates',revision:reviewRevision(this.graph),states:await readChecklist(path.join(this.storage,'review-state.json'),this.graph)});}
   async openDiff(id?:string,requestedFile?:string){
@@ -142,7 +146,7 @@ export class CodeTrailHost implements vscode.Disposable {
     let afterUri=vscode.Uri.file(path.resolve(this.root,file));
     if(/^[a-f0-9]{40,64}$/.test(graph.review.head)){const content=await readRevision(graph.review.head);afterUri=vscode.Uri.parse('code-trail-baseline:/diff/'+graph.review.head+'/'+encodeURIComponent(file));this.snippets.set(afterUri.toString(),content);}
     else {try{await fs.access(afterUri.fsPath);}catch{afterUri=vscode.Uri.parse('code-trail-baseline:/deleted/'+encodeURIComponent(file));this.snippets.set(afterUri.toString(),'');}}
-    await vscode.commands.executeCommand('vscode.diff',beforeUri,afterUri,'CodeTrail · '+file,{viewColumn:vscode.ViewColumn.One,preview:true});return {file,before:beforeUri.toString(),after:afterUri.toString()};
+    await vscode.commands.executeCommand('vscode.diff',beforeUri,afterUri,'CodeTrail · '+file,{viewColumn:this.sourceViewColumn(),preview:true});return {file,before:beforeUri.toString(),after:afterUri.toString()};
   }
   async handle(message:any):Promise<void>{
     if(!message||typeof message!=='object'||JSON.stringify(message).length>MAX_MESSAGE)throw new Error('无效的面板消息');

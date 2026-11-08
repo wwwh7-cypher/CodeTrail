@@ -1,10 +1,20 @@
-# CodeTrail 0.5.0 验证
+# CodeTrail 验证记录
 
-日期：2026-11-08。发布者：`wwwh7`。发布渠道：GitHub Releases 与 VS Code Marketplace（扩展 ID `wwwh7.codetrail-app`，显示名 CodeTrail）。Marketplace 0.5.0 已发布提交成功；首次发布的 Marketplace 扫描/验证可能延迟页面可见与安装。
+更新日期：2026-11-09。发布者：`wwwh7`。扩展 ID：`wwwh7.codetrail-app`。Marketplace 0.5.1 已提交发布成功；公开页面同步可能延迟。GitHub Releases 既有资产仍为 0.5.0，本轮仅更新 GitHub 源码。
 
-本文件记录开发机上的实际执行结果。表中 `output/...` 证据是本机验证产物，已被 gitignore、不随仓库分发；预编译 VSIX、Skill 与源码包通过 GitHub Releases 与 VS Code Marketplace 分发。0.5.0 结果来自加入 C/C++ 支持后的最终构建。
+本文件记录开发机上的实际执行结果。表中 `output/...` 证据是本机验证产物，已被 gitignore、不随仓库分发；预编译 VSIX、Skill 与源码包通过 GitHub Releases 与 VS Code Marketplace 分发。下文分别保留 0.5.1 交互改进与 0.5.0 发布构建的验证结果。
 
-## 0.5.0 最终验证
+## 0.5.1 交互与模块图发布（2026-11-09）
+
+- Rust release 构建与扩展 TypeScript 编译通过；本轮未修改 Rust 分析逻辑。
+- 扩展单元测试 3 项通过；真实 VS Code Extension Host 10 组通过。新增断言验证从第三个源码组定位函数时保留图所在组、源码焦点与编辑器组数量，原生 diff 复用第三组。证据：`output/vscode-test/extension-host-evidence.json`。
+- 2026-11-09：缩放快捷键改为 `Ctrl + [` / `Ctrl + ]` 并常驻显示在画布图例中。真实 VS Code 键盘检查：图比例从 0.85 放大到 1.02，再缩回约 0.85；宿主 devicePixelRatio 始终为 1.5。证据：`output/shortcut-test/evidence.json`。
+- API 调用前确认弹窗已移除；打包检查确认生成的 host.js 不含原确认入口。本轮不使用真实付费 API。
+- 0.5.1 已通过 vsce 发布到 Marketplace（wwwh7.codetrail-app，win32-x64），发布输出：`output/marketplace-publish-051.log`。本轮未创建 GitHub Release。
+- 模块图新增目标居中、每侧默认 10 个直接关系、独立展开、本层全量搜索、目录下钻与路径返回、按调用点数量排序和证据分批查看；双向依赖保留双向边并合并节点。
+- 最终浏览器回归 17 组通过，含 50 个关联模块的拥挤场景，0 页面脚本错误；Rust 56 项与扩展单元测试 3 项通过。最终 VSIX 为 4,002,349 字节，无新增依赖。包内 16 个文件；不包含 node_modules、测试或原生二进制的重复副本。
+
+## 0.5.0 发布时验证
 
 | 检查 | 结果 | 可核对证据 |
 | --- | --- | --- |

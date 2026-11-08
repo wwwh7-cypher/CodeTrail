@@ -1,6 +1,6 @@
 # CodeTrail
 
-在 Agent 写代码之后，用模糊搜索与交互式函数调用网络帮助开发者定位、理解和复核修改。核心由 Rust 编写；独立 HTML 与 VS Code Webview 共用同一套阅读和探索逻辑。当前版本 0.5.0，发布者 `wwwh7`。
+在 Agent 写代码之后，用模糊搜索与交互式函数调用网络帮助开发者定位、理解和复核修改。核心由 Rust 编写；独立 HTML 与 VS Code Webview 共用同一套阅读和探索逻辑。当前版本 0.5.1，发布者 `wwwh7`。
 
 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wwwh7.codetrail-app)（扩展 ID `wwwh7.codetrail-app`，显示名 CodeTrail） · [下载预编译版本（GitHub Releases）](https://github.com/wwwh7-cypher/CodeTrail/releases) · [Agent Skill 入口](SKILL.md) · [验证记录与边界](VERIFICATION.md) · [发布说明](docs/RELEASING.md)
 
@@ -30,6 +30,10 @@
 4. 输入函数缩写、文件名或已有中文职责并回车；单击节点继续展开。`Ctrl+Alt+G` 在编辑器中定位当前函数。
 
 普通搜索、看图与 Git 审查不依赖模型；只有“解释此函数”需要自备 API（见下文两种模型入口）。
+
+调用图中拖动节点或空白处即可平移，单击节点查看详情。鼠标位于图内或焦点在图上时，`Ctrl + [` 缩小、`Ctrl + ]` 放大、`Ctrl + 0` 适应全图；也可用 `Ctrl + 滚轮` 缩放、`Shift + 滚轮` 平移。普通滚轮滚动页面。Mac 使用 `⌘` 替代 `Ctrl`。
+
+VS Code 分屏调整保留当前视角；窄屏下详情随页面滚动，源码跳转和 diff 复用源码编辑器组。“解释此函数”直接使用已配置的 API，不再弹出调用前确认。
 
 ### 2. 命令行与独立 HTML
 
