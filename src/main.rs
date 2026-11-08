@@ -21,6 +21,10 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
+    #[command(
+        about = "扫描仓库，生成代码图与静态导览",
+        long_about = "扫描仓库中的 TypeScript/JavaScript/Python/Go/Svelte 文件，构建函数调用图，并输出可离线打开的 HTML 导览与 JSON 图。"
+    )]
     Scan {
         repo: PathBuf,
         #[arg(short, long, default_value = "code-trail.html")]
@@ -36,6 +40,10 @@ enum Command {
         #[arg(long)]
         cache: Option<PathBuf>,
     },
+    #[command(
+        about = "按 Git 变更生成审查导览",
+        long_about = "比较 Git 基线到目标提交的变更，标注受影响的函数、调用边与审查疑点，输出审查用 HTML、JSON 与可选报告。"
+    )]
     Review {
         repo: PathBuf,
         #[arg(long, default_value = "HEAD")]
@@ -53,16 +61,28 @@ enum Command {
         #[arg(long)]
         report: Option<PathBuf>,
     },
+    #[command(
+        about = "查询已生成的代码图",
+        long_about = "在 JSON 代码图上执行路径、影响面、搜索、邻居与模块查询，结果以 JSON 输出。"
+    )]
     Query {
         graph: PathBuf,
         #[command(subcommand)]
         operation: Query,
     },
+    #[command(
+        about = "由 JSON 图重新渲染 HTML 导览",
+        long_about = "读取已有 JSON 代码图，重新渲染为自包含的离线 HTML 导览。"
+    )]
     Render {
         graph: PathBuf,
         #[arg(short, long)]
         out: PathBuf,
     },
+    #[command(
+        about = "管理有界稳定记忆",
+        long_about = "管理经确认的稳定记忆：查看状态、导出上下文、保存与确认、标记过期、清理和检索。"
+    )]
     Memory {
         #[arg(long)]
         graph: PathBuf,
@@ -71,24 +91,44 @@ enum Command {
         #[command(subcommand)]
         operation: Memory,
     },
+    #[command(
+        about = "启动 MCP stdio 服务",
+        long_about = "以 stdio 方式提供只读 MCP 工具，供编辑器或其他客户端查询代码图与稳定记忆。"
+    )]
     Mcp {
         #[arg(long)]
         graph: PathBuf,
         #[arg(long)]
         store: PathBuf,
     },
+    #[command(
+        about = "统计文本的 token 数",
+        long_about = "用 cl100k_base 分词器统计文件的 token 数，并输出字节数与上限。"
+    )]
     Tokens {
         input: PathBuf,
     },
+    #[command(
+        about = "导出内置查看器模板",
+        long_about = "将内置的 HTML 查看器模板导出到指定路径，便于自定义后复用。"
+    )]
     Template {
         #[arg(long)]
         out: PathBuf,
     },
+    #[command(
+        about = "生成函数标注模板",
+        long_about = "为指定函数（未指定时为全部相关函数）生成待填写的标注模板 JSON。"
+    )]
     PrepareAnnotations {
         graph: PathBuf,
         #[arg(long)]
         function: Vec<String>,
     },
+    #[command(
+        about = "应用标注并写回代码图",
+        long_about = "校验并应用人工标注 JSON，输出更新后的代码图。"
+    )]
     Annotate {
         graph: PathBuf,
         #[arg(long)]
@@ -99,24 +139,48 @@ enum Command {
 }
 #[derive(Subcommand)]
 enum Query {
+    #[command(
+        about = "查找两个符号间的最短静态调用路径",
+        long_about = "在代码图中从起点到终点查找最短的已解析静态调用路径。"
+    )]
     Path {
         from: String,
         to: String,
     },
+    #[command(
+        about = "列出该函数可能影响的上游入口",
+        long_about = "反向遍历调用边，列出可能受该函数影响的上游函数与入口；这是静态可达分析，不代表运行时证明。"
+    )]
     Impact {
         function: String,
     },
+    #[command(
+        about = "按名称查找符号",
+        long_about = "按名称或关键词在代码图中查找符号及其文件与行号。"
+    )]
     Find {
         text: String,
     },
+    #[command(
+        about = "检索代码中的能力声明",
+        long_about = "检索源码注释中的能力声明（claim），用于审查证据对照。"
+    )]
     Claims {
         text: String,
     },
+    #[command(
+        about = "模糊搜索符号",
+        long_about = "对符号名、职责说明等字段做模糊与子序列搜索，并分页返回结果。"
+    )]
     Search {
         text: String,
         #[arg(long, default_value_t = 50)]
         limit: usize,
     },
+    #[command(
+        about = "列出函数的直接邻居",
+        long_about = "列出与该函数直接相连的调用者与被调用者，支持分页。"
+    )]
     Neighbors {
         function: String,
         #[arg(long, default_value_t = 0)]
@@ -124,18 +188,38 @@ enum Query {
         #[arg(long, default_value_t = 100)]
         limit: usize,
     },
+    #[command(
+        about = "列出模块级节点",
+        long_about = "列出各文件的模块顶层节点及其统计信息。"
+    )]
     Modules,
 }
 #[derive(Subcommand)]
 enum Memory {
+    #[command(
+        about = "查看记忆库状态",
+        long_about = "查看稳定记忆、待确认与过期条目的数量与状态。"
+    )]
     Status,
+    #[command(
+        about = "导出稳定记忆上下文",
+        long_about = "按 token 上限导出已确认的稳定记忆上下文。"
+    )]
     Context,
+    #[command(
+        about = "保存稳定记忆",
+        long_about = "保存经确认的稳定记忆条目。"
+    )]
     SaveStable {
         #[arg(long)]
         input: PathBuf,
         #[arg(long)]
         confirmed: bool,
     },
+    #[command(
+        about = "确认审查结论",
+        long_about = "为函数确认审查结论并写入稳定记忆。"
+    )]
     ConfirmReview {
         #[arg(long)]
         function: Vec<String>,
@@ -144,15 +228,27 @@ enum Memory {
         #[arg(long)]
         confirmed: bool,
     },
+    #[command(
+        about = "标记记忆已过期",
+        long_about = "将指定记忆标记为过期，使其不再进入默认上下文。"
+    )]
     MarkStale {
         id: String,
         #[arg(long)]
         confirmed: bool,
     },
+    #[command(
+        about = "清理过期记忆",
+        long_about = "清理过期与无效的记忆条目。"
+    )]
     Prune {
         #[arg(long)]
         confirmed: bool,
     },
+    #[command(
+        about = "检索记忆",
+        long_about = "按文本检索记忆条目，可选择是否包含过期条目。"
+    )]
     Query {
         text: String,
         #[arg(long)]

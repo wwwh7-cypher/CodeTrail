@@ -1,8 +1,9 @@
-// Reproducible browser smoke/regression suite. Set PLAYWRIGHT_MODULE and CHROMIUM_PATH on other machines.
+// Reproducible browser smoke/regression suite. Playwright and Chrome/Chromium are
+// resolved by scripts/lib/browser-env.cjs; override PLAYWRIGHT_MODULE/CHROMIUM_PATH if needed.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
-const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'C:/Users/zhao/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const {launch}=require('./lib/browser-env.cjs');
 const root=path.resolve(__dirname,'..'),out=path.join(root,'output/browser-test');fs.mkdirSync(out,{recursive:true});
-(async()=>{const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||'C:/Users/zhao/AppData/Local/ms-playwright/chromium-1194/chrome-win/chrome.exe'});const page=await browser.newPage({viewport:{width:1600,height:1100},acceptDownloads:true});const errors=[],checks=[];page.on('pageerror',e=>errors.push(e.message));const url=n=>'file:///'+path.join(root,'output/research-atlas',n).replaceAll('\\','/');
+(async()=>{const browser=await launch();const page=await browser.newPage({viewport:{width:1600,height:1100},acceptDownloads:true});const errors=[],checks=[];page.on('pageerror',e=>errors.push(e.message));const url=n=>'file:///'+path.join(root,'output/research-atlas',n).replaceAll('\\','/');
  await page.goto(url('frontend-preview.html'));await page.waitForSelector('.graph-node');await page.waitForTimeout(400);
  assert.ok(await page.locator('.graph-node').count()>2);assert.equal(await page.locator('#canvas-label').count(),0);assert.equal(await page.locator('#inspector .role').evaluate(e=>getComputedStyle(e).fontSize),'15px');checks.push('real frontend boots with readable summaries and no graph watermark');
  await page.locator('#search').fill('pBtx');await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');await page.waitForTimeout(450);assert.equal(await page.evaluate(()=>byId.get(E.focus).name),'parseBibtex');checks.push('fuzzy abbreviation and keyboard focus');

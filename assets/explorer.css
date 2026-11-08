@@ -4,3 +4,11 @@
 @media(max-width:760px){.sidebar .explorer{display:block!important;width:100%}.sidebar{flex-wrap:wrap}.file-list{max-height:160px}.explorer .search{width:100%}.explorer .section-label{margin-top:8px}}
 
 .signature-context{font-size:13px;line-height:1.9;margin:10px 0 20px;overflow-wrap:anywhere}.signature-context summary{cursor:pointer;color:var(--text)}.signature-context code{font-size:12px;white-space:pre-wrap}.signature-context .code{font-size:12px;max-height:160px;overflow:auto}
+
+/* Review queue: named changes first, anonymous callbacks collapsed by default. */
+.review-queue-meta{margin:0 0 8px;font-size:10px;line-height:1.7;color:var(--subtle)}
+.anon-group{margin:8px 0 2px;border-top:1px solid var(--line);padding-top:6px}
+.anon-group summary{cursor:pointer;padding:4px 0;font-size:11px;color:var(--muted)}
+.anon-group summary:hover{color:var(--ink)}
+.anon-list{max-height:240px;overflow:auto;scrollbar-width:thin}
+.anon-group .small{margin:6px 2px 2px;line-height:1.7}

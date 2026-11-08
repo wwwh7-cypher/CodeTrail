@@ -9,7 +9,7 @@ Use one deterministic code graph for function exploration, change review, and ar
 
 ## Operating rules
 
-1. Resolve paths relative to this skill directory. Use `bin/code-trail.exe` on Windows. Other platforms require `cargo build --release --locked`, then `target/release/code-trail`. The Windows helper is `pwsh -File scripts/build.ps1`. The Rust analyzer requires no API key, Node runtime or server.
+1. Resolve paths relative to this skill directory. A released skill zip already contains `bin/code-trail.exe` for Windows. In a source checkout, build the binary first: `pwsh -File scripts/build.ps1` on Windows, or `cargo build --release --locked` on other platforms (then use `target/release/code-trail`). The Rust analyzer requires no API key, Node runtime or server.
 2. Inspect the requested repository and any applicable AGENTS.md. Write analysis outputs outside the analyzed repository by default. Use an output location accessible to the current session; never hardcode the developer's example project.
 3. Run native analysis before describing topology. Report diagnostics and unresolved paths. A missing static edge does not prove runtime unreachability. Auto-detected zero-indegree nodes are candidates, not verified runtime entry points.
 4. The current conversation model reads selected source excerpts and writes only descriptions. Never ask for an extra API key or copy VS Code credentials to use this skill. Never invent nodes or edges from model prose.
@@ -90,6 +90,6 @@ Use stdio JSON-RPC initialization. Tools: `code_trail_search`, `code_trail_neigh
 
 ## VS Code counterpart
 
-The separate VSIX embeds the same Rust core and HTML UI, with source/diff navigation, file-change refresh, optional language-service Call Hierarchy, versioned review checklists, native memory confirmation and API settings. Provider, API Base URL, optional Models URL and Model ID are settings; API Key is scoped by provider and origin in SecretStorage. It supports OpenAI-compatible and Anthropic protocols. This BYOK route belongs to VS Code; the Skill route above uses the current conversation model.
+The separate VSIX (download from GitHub Releases, or build locally with `scripts/build.ps1`, `npm --prefix extension ci` and `npm --prefix extension run package`) embeds the same Rust core and HTML UI, with source/diff navigation, file-change refresh, optional language-service Call Hierarchy, versioned review checklists, native memory confirmation and API settings. Provider, API Base URL, optional Models URL and Model ID are settings; API Key is scoped by provider and origin in SecretStorage. It supports OpenAI-compatible and Anthropic protocols. This BYOK route belongs to VS Code; the Skill route above uses the current conversation model.
 
 See [analysis boundaries](references/analysis-contract.md) and the root README for development/verification. No runtime execution, dynamic-call completeness or model hallucination immunity is promised.

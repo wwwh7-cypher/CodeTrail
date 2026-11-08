@@ -115,3 +115,82 @@ fn fingerprints_are_content_based_and_entry_order_is_preserved() {
     let third = scan("third.html");
     assert_ne!(first["snapshot"], third["snapshot"]);
 }
+
+fn help_text(args: &[&str]) -> String {
+    let output = exe().args(args).arg("--help").output().unwrap();
+    assert!(
+        output.status.success(),
+        "help failed for {args:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).unwrap()
+}
+
+#[test]
+fn every_subcommand_and_nested_operation_has_chinese_help_text() {
+    let top = help_text(&[]);
+    for needle in [
+        "扫描仓库",
+        "Git 变更",
+        "查询已生成的代码图",
+        "重新渲染",
+        "稳定记忆",
+        "MCP stdio",
+        "token 数",
+        "查看器模板",
+        "函数标注模板",
+        "应用标注",
+    ] {
+        assert!(
+            top.contains(needle),
+            "top-level help is missing {needle:?}: {top}"
+        );
+    }
+    for (command, needle) in [
+        ("scan", "扫描仓库中的 TypeScript"),
+        ("review", "比较 Git 基线"),
+        ("query", "在 JSON 代码图上执行路径"),
+        ("render", "重新渲染为自包含"),
+        ("memory", "管理经确认的稳定记忆"),
+        ("mcp", "以 stdio 方式提供只读 MCP"),
+        ("tokens", "cl100k_base"),
+        ("template", "内置的 HTML 查看器模板"),
+        ("prepare-annotations", "待填写的标注模板"),
+        ("annotate", "校验并应用人工标注"),
+    ] {
+        assert!(
+            help_text(&[command]).contains(needle),
+            "`{command} --help` is missing {needle:?}"
+        );
+    }
+    let query = help_text(&["query"]);
+    for needle in [
+        "查找两个符号间的最短静态调用路径",
+        "上游入口",
+        "按名称查找符号",
+        "能力声明",
+        "模糊搜索符号",
+        "直接邻居",
+        "模块级节点",
+    ] {
+        assert!(
+            query.contains(needle),
+            "`query --help` is missing {needle:?}: {query}"
+        );
+    }
+    let memory = help_text(&["memory"]);
+    for needle in [
+        "查看记忆库状态",
+        "导出稳定记忆上下文",
+        "保存稳定记忆",
+        "确认审查结论",
+        "标记记忆已过期",
+        "清理过期记忆",
+        "检索记忆",
+    ] {
+        assert!(
+            memory.contains(needle),
+            "`memory --help` is missing {needle:?}: {memory}"
+        );
+    }
+}

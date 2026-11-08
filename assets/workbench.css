@@ -17,3 +17,9 @@
 @media(max-width:1250px){.split{grid-template-columns:minmax(0,1fr) 300px!important}.inspector{padding:18px}.selected-title{font-size:18px}.controls{gap:10px}.control select{max-width:180px}.canvas{height:620px}.flow-reading{flex-direction:column;gap:5px}}
 @media(max-width:1000px){.split{grid-template-columns:1fr!important}.canvas{height:660px}.inspector{border-left:0;border-top:1px solid var(--line);max-height:650px!important}.memory-layout{grid-template-columns:1fr}.memory-panel+.memory-panel{border-left:0;border-top:1px solid var(--line)}}
 @media(max-width:600px){.canvas{height:620px;min-height:620px}.controls{padding:12px;gap:10px}.view-switch{width:100%}.view-switch button{flex:1}.work-head{flex-wrap:wrap}.work-tools{margin-left:auto}.main{padding-left:12px;padding-right:12px}.top-actions .badge{display:none}.flow-reading{padding:12px}.inspector{padding:20px}.memory-panel{padding:19px}.memory-preview{padding:16px}.api-form{padding:18px}.intro h1{font-size:23px}.stats{grid-template-columns:repeat(4,1fr)}.record-summary{grid-template-columns:1fr;gap:5px}.record-summary dt:not(:first-child){margin-top:9px}.is-maximized #graph-workspace{inset:5px}.is-maximized .canvas{min-height:500px}.legend{font-size:11px}}
+
+/* No-description state: honest structural hint instead of an invented responsibility. */
+.role-missing{border:1px dashed var(--line);border-radius:6px;padding:13px 15px;margin:14px 0 0;background:var(--bg)}
+.role-missing .role-missing-label{display:block;margin-bottom:7px;font:10px var(--mono);letter-spacing:.8px;color:var(--blue)}
+.role-missing p{margin:0;font-size:12px;line-height:1.85;color:var(--muted)}
+.structural-hint{margin-top:10px;font-size:13px;line-height:1.9;color:var(--muted)}

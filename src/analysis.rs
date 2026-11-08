@@ -573,6 +573,89 @@ fn collect_go_types(node: Node, source: &str, unit: &mut Unit) {
     }
 }
 
+/// Same-byte-length replacement used by [`mask_abstract_property_names`].
+const ABSTRACT_MASK: &[u8; 8] = b"abs_trac";
+
+fn is_identifier_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$') || byte >= 0x80
+}
+
+/// Work around a tree-sitter-typescript 0.23.2 grammar gap (the newest grammar
+/// available to us; upgrading/forks are not an option on this toolchain):
+/// `abstract` is a keyword token in the grammar, but it is missing from the
+/// `_reserved_identifier` list in `common/define-grammar.js`, which is the only
+/// place that lets keywords appear as identifiers. Consequently a *valid*
+/// TypeScript property/method/field named `abstract` in an interface, class or
+/// object/type-literal body (`abstract?: string`, `abstract(): void`,
+/// `abstract = 1`, ...) tokenizes as the `abstract` keyword, produces a parser
+/// ERROR, and is reported as unsupported syntax. `abstract class`, `abstract
+/// new` and `abstract readonly` are legal modifier positions and already parse.
+///
+/// The workaround masks only `abstract` occurrences in property position with a
+/// dummy identifier of exactly the same byte length, so the masked text has
+/// identical byte offsets. The retry tree may therefore use the *original*
+/// source for every name/text/hash/body extraction. Returns `None` when the
+/// source contains nothing that needs masking.
+fn mask_abstract_property_names(source: &str) -> Option<String> {
+    const KEYWORD: &[u8; 8] = b"abstract";
+    let bytes = source.as_bytes();
+    let mut masked: Option<Vec<u8>> = None;
+    let mut index = 0;
+    while index + KEYWORD.len() <= bytes.len() {
+        if &bytes[index..index + KEYWORD.len()] != KEYWORD
+            || (index > 0 && is_identifier_byte(bytes[index - 1]))
+        {
+            index += 1;
+            continue;
+        }
+        // Inspect the first non-whitespace byte after the word.
+        let mut next = index + KEYWORD.len();
+        while next < bytes.len() && matches!(bytes[next], b' ' | b'\t' | b'\r' | b'\n') {
+            next += 1;
+        }
+        if next >= bytes.len() || is_identifier_byte(bytes[next]) {
+            // Modifier position (`abstract class`, `abstract new`, `abstract
+            // readonly`, `abstract <member-name>`, ...): legal in the grammar,
+            // never mask it.
+            index += 1;
+            continue;
+        }
+        // A property/method/field name — including optional `?`, definite
+        // assignment `!`, generic `<`, initializer `=` and members in object
+        // literals/type literals — is followed by one of these. Other positions
+        // keep the original keyword and therefore the original diagnostic.
+        if !matches!(
+            bytes[next],
+            b'?' | b':' | b'(' | b'=' | b'<' | b'!' | b';' | b','
+        ) {
+            index += 1;
+            continue;
+        }
+        let buffer = masked.get_or_insert_with(|| bytes.to_vec());
+        buffer[index..index + KEYWORD.len()].copy_from_slice(ABSTRACT_MASK);
+        index += KEYWORD.len();
+    }
+    masked.map(|bytes| {
+        String::from_utf8(bytes).expect("masking an ASCII word inside UTF-8 keeps the string valid")
+    })
+}
+
+/// First `ERROR`/missing node in document order as a 1-based `(line, column)`.
+fn first_error_position(node: Node) -> Option<(usize, usize)> {
+    if node.is_error() || node.is_missing() {
+        let point = node.start_position();
+        return Some((point.row + 1, point.column + 1));
+    }
+    for index in 0..node.child_count() {
+        if let Some(child) = node.child(index) {
+            if let Some(position) = first_error_position(child) {
+                return Some(position);
+            }
+        }
+    }
+    None
+}
+
 fn parse(file: &str, source: &str) -> Result<Unit> {
     let full_digest = format!("{:x}", Sha256::digest(source.as_bytes()));
     let extension = Path::new(file)
@@ -612,9 +695,31 @@ fn parse(file: &str, source: &str) -> Result<Unit> {
     };
     let mut parser = Parser::new();
     parser.set_language(&grammar)?;
-    let tree = parser
+    let mut tree = parser
         .parse(source, None)
         .context("Tree-sitter returned no tree")?;
+    // Retry once with `abstract`-as-property-name masked out (see
+    // `mask_abstract_property_names` for the upstream grammar gap). For Svelte the
+    // mask is applied to the script-extracted source, i.e. after embedding. The
+    // masked text has the same byte length, so the retry tree maps onto the
+    // original source byte-for-byte and all names/text/bodies/hashes below are
+    // still read from the original source.
+    let mut diagnostic_tree = None;
+    if tree.root_node().has_error() && matches!(extension, "ts" | "tsx" | "svelte") {
+        if let Some(masked) = mask_abstract_property_names(source) {
+            if let Some(retry) = parser.parse(&masked, None) {
+                if retry.root_node().has_error() {
+                    // The file is genuinely malformed. Keep the original tree for
+                    // extraction (no recovery surprises from the mask), but point
+                    // the diagnostic at the retry tree: its first error is the real
+                    // syntax error rather than the masked `abstract` false positive.
+                    diagnostic_tree = Some(retry);
+                } else {
+                    tree = retry;
+                }
+            }
+        }
+    }
     let mut unit = Unit {
         file: file.into(),
         digest: full_digest,
@@ -640,8 +745,10 @@ fn parse(file: &str, source: &str) -> Result<Unit> {
         },
     };
     if tree.root_node().has_error() {
+        let reported = diagnostic_tree.as_ref().unwrap_or(&tree);
+        let (line, column) = first_error_position(reported.root_node()).unwrap_or((1, 1));
         unit.diagnostics.push(format!(
-            "{file}: 解析器发生语法恢复或遇到未支持的语法；该文件的图可能不完整。"
+            "{file}:{line}:{column}: 解析器发生语法恢复或遇到未支持的语法；该文件的图可能不完整。"
         ));
     }
     let id = format!("{file}:0:0:<module>");
@@ -1414,5 +1521,159 @@ mod tests {
             g.path(&g.resolve("main").unwrap(), &g.resolve("sink").unwrap()),
             None
         );
+    }
+    fn diagnostic_line_col(diagnostic: &str, file: &str) -> (usize, usize) {
+        let rest = diagnostic
+            .strip_prefix(&format!("{file}:"))
+            .unwrap_or_else(|| panic!("unexpected diagnostic: {diagnostic}"));
+        let mut parts = rest.splitn(3, ':');
+        let line = parts.next().unwrap().parse().unwrap();
+        let column = parts.next().unwrap().parse().unwrap();
+        assert_eq!(
+            parts.next().unwrap(),
+            " 解析器发生语法恢复或遇到未支持的语法；该文件的图可能不完整。"
+        );
+        (line, column)
+    }
+    #[test]
+    fn abstract_named_interface_properties_are_not_a_parse_error() {
+        // Regression: tree-sitter-typescript 0.23.2 only tokenizes `abstract` as
+        // the keyword, so these valid properties used to produce a false
+        // "unsupported syntax" diagnostic and could drop symbols.
+        let unit = parse(
+            "props.ts",
+            "interface Options {\n  abstract?: string;\n  abstract: string;\n  label: string;\n}\nexport function main(options: Options): string {\n  return options.abstract;\n}\n",
+        )
+        .unwrap();
+        assert!(unit.diagnostics.is_empty(), "{:?}", unit.diagnostics);
+        assert!(unit.nodes.iter().any(|n| n.name == "main"));
+    }
+    #[test]
+    fn abstract_named_methods_and_class_fields_keep_their_real_names() {
+        let unit = parse(
+            "config.ts",
+            "class Config {\n  abstract = 1;\n  abstract(): void {}\n}\nfunction main(config: Config) {\n  config.abstract();\n}\n",
+        )
+        .unwrap();
+        assert!(unit.diagnostics.is_empty(), "{:?}", unit.diagnostics);
+        let method = unit
+            .nodes
+            .iter()
+            .find(|n| n.name == "abstract")
+            .expect("method named abstract must be extracted");
+        assert_eq!(method.kind, "method");
+        // Names, signatures and hashes must come from the original source, never
+        // from the `abs_trac` parse mask.
+        assert!(method.source.contains("abstract"), "{}", method.source);
+        assert!(method.signature.contains("abstract("), "{}", method.signature);
+        assert_eq!(
+            method.content_hash,
+            format!("{:x}", Sha256::digest(b"abstract(): void {}"))
+        );
+        assert!(method.symbol_key.contains("abstract"));
+        assert!(unit.nodes.iter().any(|n| n.name == "main"));
+        assert_eq!(unit.calls.len(), 1);
+        assert_eq!(unit.calls[0].name, "abstract");
+    }
+    #[test]
+    fn multiple_abstract_properties_in_one_file_parse_completely() {
+        let unit = parse(
+            "registry.ts",
+            "interface Props {\n  abstract?: string;\n  abstract: number;\n}\ntype Config = {\n  abstract: boolean;\n  label: string;\n};\nclass Registry {\n  abstract = 1;\n  abstract(value: string): void {}\n}\nexport function read(props: Props): string {\n  return props.abstract ?? \"\";\n}\nexport function build(config: Config): Registry {\n  return new Registry();\n}\n",
+        )
+        .unwrap();
+        assert!(unit.diagnostics.is_empty(), "{:?}", unit.diagnostics);
+        for name in ["read", "build", "abstract"] {
+            assert!(
+                unit.nodes.iter().any(|n| n.name == name),
+                "missing node {name}"
+            );
+        }
+        assert_eq!(
+            unit.nodes
+                .iter()
+                .find(|n| n.name == "abstract")
+                .map(|n| n.class.as_deref()),
+            Some(Some("Registry"))
+        );
+    }
+    #[test]
+    fn abstract_property_in_svelte_embedded_script_parses() {
+        // The mask must be applied to the script-extracted source, after embedding.
+        let unit = parse(
+            "Widget.svelte",
+            "<script lang=\"ts\">\ninterface Props {\n  abstract?: string;\n}\nexport function main(props: Props) {\n  return props.abstract;\n}\n</script>\n<h1>{props.abstract}</h1>\n",
+        )
+        .unwrap();
+        assert!(unit.diagnostics.is_empty(), "{:?}", unit.diagnostics);
+        let main = unit
+            .nodes
+            .iter()
+            .find(|n| n.name == "main")
+            .expect("main node must be extracted from the embedded script");
+        assert_eq!(main.line, 5);
+        assert!(main.source.contains("props.abstract"), "{}", main.source);
+    }
+    #[test]
+    fn abstract_class_modifiers_still_parse_alongside_masked_properties() {
+        let unit = parse(
+            "base.ts",
+            "abstract class Base {\n  abstract run(): void;\n  abstract readonly name: string;\n}\nclass Impl extends Base {\n  run(): void {}\n}\ninterface Options {\n  abstract?: string;\n}\nfunction use(impl: Impl, options: Options) {\n  impl.run();\n}\n",
+        )
+        .unwrap();
+        // The masked retry must succeed, which also proves `abstract class` /
+        // `abstract readonly` modifiers were not masked (masking them would break
+        // the retry and leave the original `abstract?:` error in place).
+        assert!(unit.diagnostics.is_empty(), "{:?}", unit.diagnostics);
+        let run = unit
+            .nodes
+            .iter()
+            .filter(|n| n.name == "run")
+            .collect::<Vec<_>>();
+        assert_eq!(run.len(), 1, "only the concrete method is a function node");
+        assert_eq!(run[0].class.as_deref(), Some("Impl"));
+        assert!(unit.nodes.iter().any(|n| n.name == "use"));
+    }
+    #[test]
+    fn mask_replaces_only_property_position_abstract() {
+        let source = "abstract class Base {\n  abstract run(): void;\n  abstract readonly name: string;\n  abstract?: string;\n}\n";
+        let masked = mask_abstract_property_names(source).expect("property position must be masked");
+        assert_eq!(masked.len(), source.len(), "offsets must be preserved");
+        assert_eq!(masked.matches("abs_trac").count(), 1);
+        assert!(masked.contains("abs_trac?: string"));
+        assert!(masked.contains("abstract class Base"));
+        assert!(masked.contains("abstract run(): void;"));
+        assert!(masked.contains("abstract readonly name"));
+        // No property position at all -> no pointless retry.
+        assert!(
+            mask_abstract_property_names("abstract class Base { abstract run(): void; }").is_none()
+        );
+        assert!(mask_abstract_property_names("const abstractValue = 1;").is_none());
+        // Multi-byte neighbors must not be split and the result must stay valid UTF-8.
+        let chinese = "// 中文注释\ninterface 配置 {\n  abstract?: string;\n}\n";
+        let masked = mask_abstract_property_names(chinese).expect("must mask the property name");
+        assert_eq!(masked.len(), chinese.len());
+        assert_eq!(masked.matches("abs_trac").count(), 1);
+    }
+    #[test]
+    fn malformed_source_diagnostic_has_one_based_line_and_column() {
+        let unit = parse("a.ts", "const a = 1;\nconst broken = ;\n").unwrap();
+        assert_eq!(unit.diagnostics.len(), 1, "{:?}", unit.diagnostics);
+        let (line, column) = diagnostic_line_col(&unit.diagnostics[0], "a.ts");
+        // The first ERROR node is on line 2, at the 1-based column of `=`.
+        assert_eq!((line, column), (2, 14), "{}", unit.diagnostics[0]);
+    }
+    #[test]
+    fn masked_retry_never_hides_a_genuinely_malformed_file() {
+        let unit = parse(
+            "broken.ts",
+            "interface Options { abstract?: string }\nfunction broken( {\n",
+        )
+        .unwrap();
+        assert_eq!(unit.diagnostics.len(), 1, "{:?}", unit.diagnostics);
+        let (line, column) = diagnostic_line_col(&unit.diagnostics[0], "broken.ts");
+        // The masked retry fixes the `abstract` false positive but must still report
+        // the real syntax error (line 2), not the masked line 1 property.
+        assert_eq!((line, column), (2, 1), "{}", unit.diagnostics[0]);
     }
 }

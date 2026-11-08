@@ -1,6 +1,10 @@
 /target/
 /output/
+/bin/
+/extension/bin/
+/extension/LICENSE
 /extension/node_modules/
 /extension/out/
 /extension/test-output/
-
+__pycache__/
+*.pyc

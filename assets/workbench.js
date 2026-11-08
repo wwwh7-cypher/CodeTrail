@@ -24,9 +24,9 @@ function sourceNote(n) { const note = sourceNotes[n.id]; return note && (!note.c
 const domainWords = { Bibliography:'文献内容',Bibtex:'BibTeX',BibTeX:'BibTeX',Ris:'RIS',Csl:'CSL',Json:'JSON',Authors:'作者',Author:'作者',Format:'格式',Fields:'字段',Field:'字段',Value:'值',Group:'括号分组',Entry:'条目',Entries:'条目',Import:'导入',Title:'标题',DOI:'DOI',Doi:'DOI',Year:'年份',Text:'文本',Paper:'论文',Papers:'论文',Document:'文档',Documents:'文档',Project:'项目',Projects:'项目',Config:'配置',File:'文件',Files:'文件',Search:'检索',Query:'查询',Answer:'回答',Evidence:'证据',Chunks:'分块',Chunk:'分块',Metadata:'元数据',Network:'网络',Relations:'关联',Record:'记录',Page:'页面',Pages:'页面',Latex:'LaTeX',Workspace:'工作区',Settings:'设置',User:'用户',Result:'结果',Results:'结果',Response:'响应',Request:'请求',Session:'会话',Cache:'缓存',List:'列表',Columns:'列',Column:'列',Routes:'路由',Server:'服务',App:'应用' };
 function nameHint(n) {
   if (n.kind === 'module') return '模块顶层执行';
-  if (n.name.startsWith('<')) return '回调处理';
+  if (n.name.startsWith('<')) return '匿名回调';
   const m = n.name.match(/^(parse|normalize|detect|split|decode|encode|validate|load|save|create|delete|remove|fetch|search|find|read|write|build|render|open|close|update|handle|get|set|collect|filter|format|calculate|compute|rank|scan|resolve|clear|start|stop|import|export|preview|pick|ensure)(.*)$/i);
-  if (!m) return n.name === 'main' ? '启动应用' : n.name === 'collapse' ? '整理文本空白' : '处理函数数据';
+  if (!m) return n.name === 'main' ? '启动应用' : n.name === 'collapse' ? '整理文本空白' : n.name;
   const verbs = {parse:'解析',normalize:'统一',detect:'识别',split:'拆分',decode:'解码',encode:'编码',validate:'校验',load:'加载',save:'保存',create:'创建',delete:'删除',remove:'移除',fetch:'获取',search:'检索',find:'查找',read:'读取',write:'写入',build:'构建',render:'渲染',open:'打开',close:'关闭',update:'更新',handle:'处理',get:'获取',set:'设置',collect:'收集',filter:'筛选',format:'格式化',calculate:'计算',compute:'计算',rank:'排序',scan:'扫描',resolve:'解析',clear:'清理',start:'启动',stop:'停止',import:'导入',export:'导出',preview:'预览',pick:'选择',ensure:'检查'};
   const words = m[2].replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ').trim().split(/\s+/).filter(Boolean);
   const translated = words.map(w => domainWords[w] || domainWords[w[0]?.toUpperCase() + w.slice(1)] || w).join('');
@@ -34,21 +34,25 @@ function nameHint(n) {
 }
 function describe(n) {
   const note = sourceNote(n);
-  if (note && n.role_source!=='llm-unverified') return { title:note.title, summary:note.summary, provenance:note.source==='conversation-model'?'当前对话模型说明 · 待人工确认':note.source==='byok-model'?'BYOK 模型说明 · 待人工确认':'源码阅读摘要 · 待人工确认' };
-  if (n.role_source === 'llm-unverified') return {title:nameHint(n),summary:n.role,provenance:'BYOK 模型叙述 · 待人工确认'};
-  if (['source-comment','source-docstring'].includes(n.role_source)) return {title:nameHint(n),summary:n.role,provenance:'来自源码注释'};
-  if (n.kind === 'module') return {title:'执行模块初始化',summary:'执行文件顶层的调用与初始化逻辑。',provenance:'基于语法结构'};
+  if (note && n.role_source!=='llm-unverified') return { title:note.title || nameHint(n), summary:note.summary || nameHint(n), provenance:note.source==='conversation-model'?'当前对话模型说明 · 待人工确认':note.source==='byok-model'?'BYOK 模型说明 · 待人工确认':'源码阅读摘要 · 待人工确认', basis:'note' };
+  if (n.role_source === 'llm-unverified') return {title:nameHint(n),summary:n.role,provenance:'BYOK 模型叙述 · 待人工确认',basis:'model'};
+  if (['source-comment','source-docstring'].includes(n.role_source)) return {title:nameHint(n),summary:n.role,provenance:'来自源码注释',basis:'comment'};
+  if (n.kind === 'module') return {title:'执行模块初始化',summary:'执行文件顶层的调用与初始化逻辑。',provenance:'基于语法结构',basis:'structural'};
   const calls = (adj.get(n.id) || []).length;
   const returns = /\breturn\b/.test(n.source);
-  return {title:nameHint(n),summary:`${nameHint(n)}；${calls ? `继续调用 ${calls} 个已解析函数` : returns ? '返回处理后的结果' : '完成当前函数体中的操作'}。`,provenance:'名称与语法提示 · 业务职责待核对'};
+  const structural = calls ? `继续调用 ${calls} 个已解析函数，并完成函数体中其余操作。` : returns ? '函数体包含返回语句，但没有已解析的对外调用。' : '函数体没有已解析的对外调用，也没有显式返回语句。';
+  if (n.name.startsWith('<')) return {title:'匿名回调',summary:structural,provenance:'结构提示 · 匿名回调没有源码注释，未生成职责说明',basis:'none'};
+  const hint = nameHint(n);
+  const named = hint !== n.name;
+  return {title:hint,summary:named?`${hint}；${structural}`:structural,provenance:named?'名称提示 · 未生成职责说明，业务含义待核对':'未生成职责说明 · 仅结构提示',basis:named?'name-hint':'none'};
 }
 function scopeFunctions() { return functions.filter(n => inScope(n) && !n.name.startsWith('<')); }
-function option(n) { return `<option value="${esc(n.id)}">${esc(describe(n).title + ' · ' + n.name)}</option>`; }
+function option(n) { const d = describe(n); return `<option value="${esc(n.id)}">${esc(d.title === n.name ? n.name : d.title + ' · ' + n.name)}</option>`; }
 function renderFiles() {
   const text = $('#search').value.toLowerCase();
   const found = scopeFunctions().filter(n => `${n.name} ${n.file} ${describe(n).title} ${describe(n).summary}`.toLowerCase().includes(text));
   found.sort((a,b)=>Number(!!sourceNote(b))-Number(!!sourceNote(a))||a.file.localeCompare(b.file)||a.line-b.line);
-  $('#file-list').innerHTML = found.slice(0,100).map(n => `<button class="file ${n.id === state.selected ? 'active' : ''}" data-node="${esc(n.id)}" title="${esc(n.file + ':' + n.line)}"><span class="file-title">${esc(describe(n).title)}</span><span class="file-symbol">${esc(n.name)}</span></button>`).join('') || '<p class="small muted">没有匹配的函数。</p>';
+  $('#file-list').innerHTML = found.slice(0,100).map(n => { const d = describe(n); const secondary = d.title === n.name ? n.file + ':' + n.line : n.name; return `<button class="file ${n.id === state.selected ? 'active' : ''}" data-node="${esc(n.id)}" title="${esc(n.file + ':' + n.line)}"><span class="file-title">${esc(d.title)}</span><span class="file-symbol">${esc(secondary)}</span></button>`; }).join('') || '<p class="small muted">没有匹配的函数。</p>';
   if (found.length > 100) $('#file-list').insertAdjacentHTML('beforeend','<p class="small muted">输入关键词查找其余函数。</p>');
   all('#file-list [data-node]').forEach(b => b.onclick = () => focusFunction(b.dataset.node));
 }
@@ -169,7 +173,13 @@ function drawGraph() {
 function renderInspector(){
   const n=byId.get(state.selected);if(!n){$('#inspector').innerHTML='<p class="muted">选择一个函数查看上下文。</p>';return;}
   const info=describe(n),incoming=G.edges.filter(e=>e.to===n.id),outgoing=G.edges.filter(e=>e.from===n.id);
-  let html=`<h2>函数上下文<span class="badge">${esc(n.language)}</span></h2><div class="selected-title">${esc(info.title)}</div><div class="selected-name">${esc(n.name)}</div><div class="location">${esc(n.file)}<br>第 ${n.line}–${n.end_line} 行</div><p class="role">${esc(info.summary)}</p><div class="source-tag">${esc(info.provenance)}</div>`;
+  const described=['note','comment','model','structural'].includes(info.basis);
+  let html=`<h2>函数上下文<span class="badge">${esc(n.language)}</span></h2>`;
+  html+=info.title===n.name?`<div class="selected-name">${esc(n.name)}</div>`:`<div class="selected-title">${esc(info.title)}</div><div class="selected-name">${esc(n.name)}</div>`;
+  html+=`<div class="location">${esc(n.file)}<br>第 ${n.line}–${n.end_line} 行</div>`;
+  if(described)html+=`<p class="role">${esc(info.summary)}</p>`;
+  else html+=`<div class="role-missing"><span class="role-missing-label">未生成职责说明</span><p>${info.basis==='none'?'源码没有注释，静态分析只读取函数名与已解析调用，不推断业务职责。下面只保留结构提示。':'标题是按命名规则推导的定位提示，不构成职责说明。下面只保留结构提示。'}</p></div><div class="structural-hint">${esc(info.summary)}</div>`;
+  html+=`<div class="source-tag">${esc(info.provenance)}</div>`;
   if(hostApi)html+=`<button id="open-editor" style="margin-top:13px">在编辑器中查看源码</button>`;
   html+='<div class="divider"></div>';
   if(state.mode==='tour'){
@@ -234,7 +244,8 @@ function render(){
   $('#panel-title').textContent=review?'潜在上游调用网络':state.view==='network'?'函数调用网络':'入口到目标的最短路径';$('#target-label').textContent=review?'修改函数':'目标函数';
   all('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));$('#depth').value=state.depth;$('#depth-value').textContent=state.depth;
   $('#legend-main').textContent=review?'反向影响链':'主路径调用';$('#legend-side').textContent='旁支调用（清晰实线）';
-  $('#boundary-notice').textContent=`已解析调用均保留文件与行号。${G.unresolved.length} 处调用未解析，${G.diagnostics.length} 条文件诊断。函数说明标明来源；名称提示与源码阅读摘要均待人工核对。动态调用或框架隐式连接可能遗漏。`;
+  $('#boundary-notice').textContent=`已解析调用均保留文件与行号。${G.unresolved.length} 处调用未纳入图，${diagnosticsLabel()||'没有文件诊断'}。点击「分析边界」或统计第 4 项可查看原因与下一步。函数说明标明来源；名称提示待人工核对。动态调用或框架隐式连接可能遗漏。`;
+  renderDiagnosticsBanner();
   $('#command-preview').textContent='code-trail query graph.json '+(review?'impact "'+(byId.get(state.target)?.name||'<function>')+'"':'path "'+(byId.get(state.entry)?.name||'<entry>')+'" "'+(byId.get(state.target)?.name||'<target>')+'"');
   if(memory)renderMemory();else if(!settings){drawGraph();renderInspector();if(review)updateImpact();}
   const path=renderedPath.map(id=>`<span class="flow-step">${esc(describe(byId.get(id)).title)}</span>`).join('<span class="flow-arrow">→</span>');
@@ -262,7 +273,10 @@ $('#repo-name').textContent=G.project;$('#crumb').textContent=G.project;
 const fileCount=new Set(G.nodes.filter(inScope).map(n=>n.file)).size;
 const scopeEdges=G.edges.filter(e=>inScope(byId.get(e.from))&&inScope(byId.get(e.to)));
 const scopeUnresolved=G.unresolved.filter(e=>byId.has(e.from)&&inScope(byId.get(e.from)));
-$('#stats').innerHTML=[[fileCount,'源码文件'],[scoped.length,'具名函数'],[scopeEdges.length,'已解析调用'],[scopeUnresolved.length,'未解析调用']].map(([number,label],i)=>`<div class="stat"><strong class="${i===3?'accent':''}">${number}</strong><span>${label}</span></div>`).join('');
+function boundaryStatHtml(value){return `<div class="stat stat-action" id="stat-boundary" role="button" tabindex="0" title="未纳入图的调用不影响已解析边；点击查看按原因聚合与文件诊断"><strong>${value}</strong><span>未纳入图的调用</span><span class="foot">原因 ›</span></div>`;}
+function bindBoundaryStat(){const el=$('#stats');if(!el||el.dataset.bound)return;el.dataset.bound='1';const open=e=>{if(e.type==='keydown'&&!(e.key==='Enter'||e.key===' '))return;if(!e.target.closest('#stat-boundary'))return;e.preventDefault();openBoundaryModal();};el.addEventListener('click',open);el.addEventListener('keydown',open);}
+$('#stats').innerHTML=[[fileCount,'源码文件'],[scoped.length,'具名函数'],[scopeEdges.length,'已解析调用']].map(([number,label])=>`<div class="stat"><strong>${number}</strong><span>${label}</span></div>`).join('')+boundaryStatHtml(scopeUnresolved.length);
+bindBoundaryStat();
 all('[data-mode]').forEach(b=>b.onclick=()=>{state.mode=b.dataset.mode;resetView();render();if(state.mode==='settings'&&hostApi)postHost({type:'settings'});if(state.mode==='memory'&&hostApi)postHost({type:'memoryStatus'});});
 all('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;state.depth=state.view==='network'?1:0;state.limit=9;resetView();render();});
 $('#depth').oninput=e=>{state.depth=+e.target.value;state.limit=9;resetView();render();};
@@ -281,7 +295,7 @@ function applyApi(config){$('#api-provider').value=config.provider;$('#api-url')
 $('#api-form').onsubmit=e=>{e.preventDefault();const config={provider:$('#api-provider').value,apiBaseUrl:$('#api-url').value,model:$('#api-model').value,modelsUrl:$('#api-models-url').value,apiKey:$('#api-key').value};if(hostApi){postHost({type:'saveConfig',config});$('#api-status').textContent='正在保存…';}else{$('#api-status').textContent='当前为离线 HTML，可预览设置布局；保存与连接测试请在 VS Code 扩展中执行。';}$('#api-key').value='';};
 $('#api-list').onclick=()=>postHost({type:'listModels'});$('#api-test').onclick=()=>postHost({type:'testConnection'});$('#api-delete').onclick=()=>postHost({type:'clearKey'});
 $('#api-provider').onchange=e=>{if(!$('#api-url').value||['https://api.openai.com/v1','https://api.anthropic.com/v1'].includes($('#api-url').value))$('#api-url').value=e.target.value==='anthropic'?'https://api.anthropic.com/v1':'https://api.openai.com/v1';};
-$('#help').onclick=()=>openModal('沿着职责与调用关系阅读代码',`<article class="markdown-reading"><h2>网状调用图</h2><p>同时展示直接调用方与被调用方；浅绿色为主路径，暖色实线为旁支。箭头指向被调用函数。扩展层级增加邻接范围，展开更多按钮增加可见函数数量。</p><h2>函数节点</h2><p>上方是中文功能名称，下方保留真实标识符、职责简述和源码位置。点击查看右侧上下文，双击把它设为新的探索目标。说明均标明来源；说明不参与连边。</p><h2>有界上下文</h2><p>默认展示排版后的内容；需要修改时切换编辑 Markdown，导出与确认预览保持正常阅读排版。</p></article>`);
+$('#help').onclick=()=>openModal('沿着职责与调用关系阅读代码',`<article class="markdown-reading"><h2>网状调用图</h2><p>同时展示直接调用方与被调用方；浅绿色为主路径，暖色实线为旁支。箭头指向被调用函数。扩展层级增加邻接范围，展开更多按钮增加可见函数数量。</p><h2>函数节点</h2><p>上方是功能名称：来自源码注释时直接展示，否则是按命名规则推导的定位提示。下方保留真实标识符与源码位置。没有注释的函数会明确标注「未生成职责说明」，而不是补写猜测。</p><h2>分析边界</h2><p>统计第 4 项「未纳入图的调用」与顶部「分析边界」提示都可以打开边界说明：按原因聚合未解析调用、列出文件诊断，并给出下一步。数量不是缺陷率。</p><h2>有界上下文</h2><p>默认展示排版后的内容；需要修改时切换编辑 Markdown，导出与确认预览保持正常阅读排版。</p></article>`);
 let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(['tour','review'].includes(state.mode)){resetView();drawGraph();}},150);});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modal').open&&document.body.classList.contains('is-maximized')){$('#maximize-graph').click();}});
 window.addEventListener('message',event=>{const m=event.data;if(!m||typeof m!=='object')return;
