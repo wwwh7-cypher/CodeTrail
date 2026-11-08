@@ -2,7 +2,7 @@
   "name": "code-trail",
   "displayName": "CodeTrail — 架构导览与 AI 修改审查",
   "description": "Rust 静态代码图：入口路径、Git 修改影响、BYOK 职责叙述与有界架构记忆。",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "wwwh7",
   "engines": {
     "vscode": "^1.100.0"
@@ -172,5 +172,13 @@
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.1.0",
     "typescript": "^5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wwwh7-cypher/CodeTrail.git"
+  },
+  "homepage": "https://github.com/wwwh7-cypher/CodeTrail#readme",
+  "bugs": {
+    "url": "https://github.com/wwwh7-cypher/CodeTrail/issues"
   }
 }

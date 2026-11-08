@@ -5,7 +5,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs,
     path::{Component, Path, PathBuf},
 };
@@ -35,6 +35,10 @@ struct Unit {
     calls: Vec<Call>,
     imports: Vec<Import>,
     diagnostics: Vec<String>,
+    /// Quoted local `#include` paths of C/C++ units, normalized to forward slashes
+    /// and relative to the including file. System `<...>` includes are ignored.
+    #[serde(default)]
+    includes: Vec<String>,
     #[serde(default)]
     package: String,
     #[serde(default)]
@@ -66,8 +70,143 @@ fn is_function(kind: &str) -> bool {
             | "method_definition"
             | "function_definition"
             | "lambda"
+            | "lambda_expression"
             | "method_declaration"
             | "func_literal"
+    )
+}
+
+/// True for the languages handled by the C/C++ resolution branch.
+fn is_c_family(language: &str) -> bool {
+    matches!(language, "C" | "C++")
+}
+
+/// Splits `app::Base::name` into (previous `::` segment, last `::` segment).
+fn qualified_parts(value: &str) -> Option<(&str, &str)> {
+    let segments = value
+        .split("::")
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    if segments.len() < 2 {
+        return None;
+    }
+    Some((segments[segments.len() - 2], segments[segments.len() - 1]))
+}
+
+/// Follows C/C++ declarator wrappers down to the node carrying the declared name.
+fn declarator_leaf(mut node: Node) -> Node {
+    loop {
+        if !matches!(
+            node.kind(),
+            "function_declarator"
+                | "pointer_declarator"
+                | "reference_declarator"
+                | "parenthesized_declarator"
+                | "array_declarator"
+                | "init_declarator"
+        ) {
+            return node;
+        }
+        match node.child_by_field_name("declarator") {
+            Some(inner) => node = inner,
+            None => return node,
+        }
+    }
+}
+
+/// Extracts `(name, class)` from a C/C++ declarator.
+///
+/// `Base::run` -> `("run", Some("Base"))`, `app::Base::create` ->
+/// `("create", Some("Base"))`, `Base::~Base` -> `("~Base", Some("Base"))`,
+/// `operator==` -> `("operator==", None)`, plain `run` -> `("run", None)`.
+fn declarator_parts(node: Node, source: &str) -> Option<(String, Option<String>)> {
+    let leaf = declarator_leaf(node);
+    match leaf.kind() {
+        "identifier" | "field_identifier" | "destructor_name" | "operator_name" => {
+            let name = text(leaf, source).trim();
+            (!name.is_empty()).then(|| (name.to_string(), None))
+        }
+        "qualified_identifier" => {
+            let (scope, name) = qualified_parts(text(leaf, source))?;
+            Some((name.to_string(), Some(scope.to_string())))
+        }
+        "template_function" => leaf
+            .child_by_field_name("name")
+            .map(|name| text(name, source).to_string())
+            .filter(|name| !name.is_empty())
+            .map(|name| (name, None)),
+        _ => None,
+    }
+}
+
+/// Finds the parameter list of a C/C++ function or lambda by walking the
+/// declarator chain (`function_definition` does not expose `parameters` directly;
+/// lambdas carry them on their `abstract_function_declarator`).
+fn function_parameters(node: Node) -> Option<Node> {
+    if let Some(parameters) = node
+        .child_by_field_name("parameters")
+        .or_else(|| node.child_by_field_name("parameter"))
+    {
+        return Some(parameters);
+    }
+    let mut current = node;
+    while let Some(declarator) = current.child_by_field_name("declarator") {
+        if matches!(
+            declarator.kind(),
+            "function_declarator" | "abstract_function_declarator"
+        ) {
+            if let Some(parameters) = declarator.child_by_field_name("parameters") {
+                return Some(parameters);
+            }
+        }
+        current = declarator;
+    }
+    None
+}
+
+/// Collects quoted local `#include "..."` paths; system `<...>` includes are
+/// ignored because they do not point into the scanned tree.
+fn collect_includes(node: Node, source: &str, output: &mut Vec<String>) {
+    if node.kind() == "preproc_include" {
+        if let Some(path) = node.child_by_field_name("path") {
+            if path.kind() == "string_literal" {
+                let raw = text(path, source);
+                if let Some(inner) = raw.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+                    let normalized = inner.replace('\\', "/");
+                    if !normalized.is_empty() {
+                        output.push(normalized);
+                    }
+                }
+            }
+        }
+    }
+    for child in children(node) {
+        collect_includes(child, source, output);
+    }
+}
+
+fn supported_extension(extension: &str) -> bool {
+    matches!(
+        extension,
+        "ts" | "tsx"
+            | "js"
+            | "jsx"
+            | "mjs"
+            | "cjs"
+            | "py"
+            | "svelte"
+            | "go"
+            | "c"
+            | "h"
+            | "cpp"
+            | "cc"
+            | "cxx"
+            | "c++"
+            | "hpp"
+            | "hh"
+            | "hxx"
+            | "h++"
     )
 }
 
@@ -99,8 +238,13 @@ fn function_name(node: Node, source: &str) -> Option<String> {
             return Some(text(name, source).to_string());
         }
     }
-    node.child_by_field_name("name")
-        .map(|name| text(name, source).to_string())
+    if let Some(name) = node.child_by_field_name("name") {
+        return Some(text(name, source).to_string());
+    }
+    // C/C++ keep the declared name inside a declarator chain.
+    node.child_by_field_name("declarator")
+        .and_then(|declarator| declarator_parts(declarator, source))
+        .map(|(name, _)| name)
 }
 
 fn class_name(node: Node, source: &str) -> Option<String> {
@@ -110,6 +254,17 @@ fn class_name(node: Node, source: &str) -> Option<String> {
         let ty = declaration.child_by_field_name("type")?;
         return Some(text(ty, source).trim_start_matches('*').to_string());
     }
+    if node.kind() == "function_definition" {
+        // Out-of-line C/C++ methods carry their class in a qualified declarator
+        // (`void Base::run() {}` / `void app::Base::run() {}`).
+        if let Some(class) = node
+            .child_by_field_name("declarator")
+            .and_then(|declarator| declarator_parts(declarator, source))
+            .and_then(|(_, class)| class)
+        {
+            return Some(class);
+        }
+    }
     if !matches!(node.kind(), "method_definition" | "function_definition") {
         return None;
     }
@@ -118,7 +273,15 @@ fn class_name(node: Node, source: &str) -> Option<String> {
         if is_function(p.kind()) {
             break;
         }
-        if matches!(p.kind(), "class_declaration" | "class_definition" | "class") {
+        if matches!(
+            p.kind(),
+            "class_declaration"
+                | "class_definition"
+                | "class"
+                | "class_specifier"
+                | "struct_specifier"
+                | "union_specifier"
+        ) {
             return p
                 .child_by_field_name("name")
                 .map(|n| text(n, source).into());
@@ -168,6 +331,53 @@ fn collect_bindings(node: Node, source: &str, names: &mut Vec<String>, first: bo
                 .is_some_and(|n| is_function(n.kind()))
             {
                 identifiers(left, source, names);
+            }
+        }
+    }
+    if node.kind() == "declaration" {
+        // C/C++: local declarations shadow later calls. Pure function prototypes
+        // only declare a callable name, so they must not count as a binding.
+        let is_typedef = children(node)
+            .iter()
+            .any(|n| n.kind() == "storage_class_specifier" && text(*n, source) == "typedef");
+        if !is_typedef {
+            for declarator in children(node) {
+                match declarator.kind() {
+                    "init_declarator" => {
+                        if let Some(inner) = declarator.child_by_field_name("declarator") {
+                            if let Some((name, _)) = declarator_parts(inner, source) {
+                                names.push(name);
+                            }
+                        }
+                    }
+                    "function_declarator" => {
+                        // `int f(int);` is a prototype; `int (*fp)(int);` declares a
+                        // function-pointer variable that does shadow calls.
+                        let declares_variable = declarator
+                            .child_by_field_name("declarator")
+                            .is_some_and(|inner| {
+                                !matches!(
+                                    inner.kind(),
+                                    "identifier" | "field_identifier" | "qualified_identifier"
+                                )
+                            });
+                        if declares_variable {
+                            if let Some((name, _)) = declarator_parts(declarator, source) {
+                                names.push(name);
+                            }
+                        }
+                    }
+                    "identifier"
+                    | "pointer_declarator"
+                    | "array_declarator"
+                    | "parenthesized_declarator"
+                    | "reference_declarator" => {
+                        if let Some((name, _)) = declarator_parts(declarator, source) {
+                            names.push(name);
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
     }
@@ -370,10 +580,9 @@ fn visit(
         );
         let class = class_name(node, source);
         let mut bindings = vec![];
-        if let Some(params) = node
-            .child_by_field_name("parameters")
-            .or_else(|| node.child_by_field_name("parameter"))
-        {
+        // C/C++ expose parameters through the declarator chain; other languages
+        // carry them directly on the function node.
+        if let Some(params) = function_parameters(node) {
             identifiers(params, source, &mut bindings);
         }
         if let Some(body) = node.child_by_field_name("body") {
@@ -425,14 +634,13 @@ fn visit(
                 .chars()
                 .take(2000)
                 .collect(),
-            parameters: node
-                .child_by_field_name("parameters")
-                .or_else(|| node.child_by_field_name("parameter"))
+            parameters: function_parameters(node)
                 .map(|p| text(p, source).chars().take(1200).collect())
                 .unwrap_or_default(),
             return_type: node
                 .child_by_field_name("return_type")
                 .or_else(|| node.child_by_field_name("result"))
+                .or_else(|| node.child_by_field_name("type"))
                 .map(|p| text(p, source).chars().take(800).collect())
                 .unwrap_or_default(),
             language: language.into(),
@@ -455,7 +663,16 @@ fn visit(
             let receiver = function
                 .child_by_field_name("object")
                 .or_else(|| function.child_by_field_name("operand"))
-                .map(|n| text(n, source).to_string());
+                // C/C++ field_expression (`this->method()`, `obj.method()`).
+                .or_else(|| function.child_by_field_name("argument"))
+                .map(|n| text(n, source).to_string())
+                // C++ qualified_identifier (`Class::method`, `app::Base::method`).
+                .or_else(|| {
+                    (function.kind() == "qualified_identifier")
+                        .then(|| qualified_parts(text(function, source)))
+                        .flatten()
+                        .map(|(scope, _)| scope.to_string())
+                });
             let name = if direct {
                 text(function, source).to_string()
             } else {
@@ -463,7 +680,15 @@ fn visit(
                     .child_by_field_name("property")
                     .or_else(|| function.child_by_field_name("attribute"))
                     .or_else(|| function.child_by_field_name("field"))
+                    .or_else(|| function.child_by_field_name("name"))
                     .map(|n| text(n, source).to_string())
+                    // Nested `app::Base::method` exposes only the last `::` segment
+                    // as the callable name.
+                    .map(|raw| {
+                        qualified_parts(&raw)
+                            .map(|(_, name)| name.to_string())
+                            .unwrap_or(raw)
+                    })
                     .unwrap_or_default()
             };
             unit.calls.push(Call {
@@ -662,7 +887,7 @@ fn parse(file: &str, source: &str) -> Result<Unit> {
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("");
-    let (language, grammar) = match extension {
+    let (mut language, grammar) = match extension {
         "ts" => (
             "TypeScript",
             tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
@@ -674,6 +899,12 @@ fn parse(file: &str, source: &str) -> Result<Unit> {
             "Svelte/TypeScript",
             tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         ),
+        "c" => ("C", tree_sitter_c::LANGUAGE.into()),
+        "cpp" | "cc" | "cxx" | "c++" | "hpp" | "hh" | "hxx" | "h++" => {
+            ("C++", tree_sitter_cpp::LANGUAGE.into())
+        }
+        // Headers are ambiguous; try C++ first and fall back to C below.
+        "h" => ("C++", tree_sitter_cpp::LANGUAGE.into()),
         _ => ("JavaScript", tree_sitter_javascript::LANGUAGE.into()),
     };
     let embedded;
@@ -720,6 +951,18 @@ fn parse(file: &str, source: &str) -> Result<Unit> {
             }
         }
     }
+    // `.h` files are ambiguous by convention. C++ is the superset, so keep that
+    // tree when it parses; otherwise retry with the C grammar (e.g. K&R function
+    // definitions or C-only identifiers) and use the tree that parses cleanly.
+    if extension == "h" && tree.root_node().has_error() {
+        parser.set_language(&tree_sitter_c::LANGUAGE.into())?;
+        if let Some(c_tree) = parser.parse(source, None) {
+            if !c_tree.root_node().has_error() {
+                tree = c_tree;
+                language = "C";
+            }
+        }
+    }
     let mut unit = Unit {
         file: file.into(),
         digest: full_digest,
@@ -727,6 +970,13 @@ fn parse(file: &str, source: &str) -> Result<Unit> {
         calls: vec![],
         imports: vec![],
         diagnostics: vec![],
+        includes: {
+            let mut includes = vec![];
+            collect_includes(tree.root_node(), source, &mut includes);
+            includes.sort();
+            includes.dedup();
+            includes
+        },
         struct_fields: Default::default(),
         local_types: Default::default(),
         package: if extension == "go" {
@@ -901,11 +1151,140 @@ fn shadowed<'a>(name: &str, owner: &'a Function, unit: &'a Unit) -> bool {
         .is_some_and(|f| f.bindings.iter().any(|b| b == name))
 }
 
+/// Precomputed C/C++ resolution scopes: for each unit, the indices of the unit
+/// itself, units of its quoted local includes, and sibling implementation units
+/// of those headers (`service.h` -> same directory `service.c|cc|cpp|cxx|c++`).
+fn include_scopes(units: &[Unit]) -> Vec<Vec<usize>> {
+    let by_file: HashMap<&str, usize> = units
+        .iter()
+        .enumerate()
+        .map(|(index, unit)| (unit.file.as_str(), index))
+        .collect();
+    units
+        .iter()
+        .enumerate()
+        .map(|(index, unit)| {
+            let mut scope = vec![index];
+            let parent = Path::new(&unit.file).parent().unwrap_or(Path::new(""));
+            for include in &unit.includes {
+                let resolved = normalize(&parent.join(include))
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let Some(&header_index) = by_file.get(resolved.as_str()) else {
+                    continue;
+                };
+                scope.push(header_index);
+                let header = Path::new(&resolved);
+                let directory = header.parent().unwrap_or(Path::new(""));
+                let Some(stem) = header.file_stem().and_then(|stem| stem.to_str()) else {
+                    continue;
+                };
+                for extension in ["c", "cc", "cpp", "cxx", "c++"] {
+                    let sibling = normalize(&directory.join(format!("{stem}.{extension}")))
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    if let Some(&sibling_index) = by_file.get(sibling.as_str()) {
+                        scope.push(sibling_index);
+                    }
+                }
+            }
+            scope.sort_unstable();
+            scope.dedup();
+            scope
+        })
+        .collect()
+}
+
+fn resolve_c_family_call<'a>(
+    call: &Call,
+    owner: &'a Function,
+    unit: &'a Unit,
+    units: &'a [Unit],
+    scopes: &[Vec<usize>],
+    unit_index: usize,
+) -> std::result::Result<(&'a Function, &'static str), &'static str> {
+    let scope = scopes.get(unit_index).map(Vec::as_slice).unwrap_or(&[]);
+    let scoped_nodes = || scope.iter().flat_map(|&index| units[index].nodes.iter());
+    let free = |node: &Function| {
+        node.class.is_none()
+            && node.scope.is_none()
+            && !matches!(node.kind.as_str(), "module" | "method" | "property-function")
+    };
+    if call.direct {
+        if shadowed(&call.name, owner, unit) {
+            return Err("shadowed-or-assigned-binding");
+        }
+        // Same-file free function first, mirroring the lexical rule used for the
+        // other languages.
+        let same_file = unit
+            .nodes
+            .iter()
+            .filter(|node| free(node) && node.name == call.name)
+            .collect::<Vec<_>>();
+        match same_file.as_slice() {
+            [target] => return Ok((target, "lexical-static")),
+            [] => {}
+            _ => return Err("ambiguous-local-symbol"),
+        }
+        // Then a unique definition from the include/sibling implementation scope.
+        let included = scoped_nodes()
+            .filter(|node| free(node) && node.name == call.name)
+            .collect::<Vec<_>>();
+        match included.as_slice() {
+            [target] => return Ok((target, "c-include-static")),
+            [] => {}
+            _ => return Err("ambiguous-local-symbol"),
+        }
+        // Unqualified call to a sibling C++ method from inside a class method.
+        if let Some(class) = owner.class.as_deref() {
+            let siblings = scoped_nodes()
+                .filter(|node| node.class.as_deref() == Some(class) && node.name == call.name)
+                .collect::<Vec<_>>();
+            return match siblings.as_slice() {
+                [target] => Ok((target, "same-class-static-candidate")),
+                [] => Err("external-or-unknown-symbol"),
+                _ => Err("unknown-or-ambiguous-method"),
+            };
+        }
+        return Err("external-or-unknown-symbol");
+    }
+    let receiver = call.receiver.as_deref().unwrap_or("");
+    if matches!(receiver, "this" | "self" | "cls") {
+        let Some(class) = owner.class.as_deref() else {
+            return Err("unknown-method-context");
+        };
+        let methods = scoped_nodes()
+            .filter(|node| node.class.as_deref() == Some(class) && node.name == call.name)
+            .collect::<Vec<_>>();
+        return match methods.as_slice() {
+            [target] => Ok((target, "same-class-static-candidate")),
+            _ => Err("unknown-or-ambiguous-method"),
+        };
+    }
+    // `Class::method()` resolves only when the receiver names a class/struct/union
+    // that has exactly one matching method definition in scope.
+    let class_names = scoped_nodes()
+        .filter_map(|node| node.class.as_deref())
+        .collect::<HashSet<_>>();
+    if !receiver.is_empty() && class_names.contains(receiver) {
+        let methods = scoped_nodes()
+            .filter(|node| node.class.as_deref() == Some(receiver) && node.name == call.name)
+            .collect::<Vec<_>>();
+        return match methods.as_slice() {
+            [target] => Ok((target, "cpp-class-static-candidate")),
+            _ => Err("dynamic-or-unknown-receiver"),
+        };
+    }
+    Err("dynamic-or-unknown-receiver")
+}
+
 fn resolve_call<'a>(
     call: &Call,
     unit: &'a Unit,
     units: &'a [Unit],
     known: &HashSet<String>,
+    scopes: &[Vec<usize>],
+    unit_index: usize,
 ) -> std::result::Result<(&'a Function, &'static str), &'static str> {
     let owner = unit
         .nodes
@@ -1010,6 +1389,9 @@ fn resolve_call<'a>(
             }
         }
         return Err("go-selector-requires-type-resolution");
+    }
+    if is_c_family(&owner.language) {
+        return resolve_c_family_call(call, owner, unit, units, scopes, unit_index);
     }
     if call.direct {
         if shadowed(&call.name, owner, unit) {
@@ -1179,10 +1561,10 @@ pub fn scan_cached(root: &Path, cache_path: Option<&Path>) -> Result<Graph> {
         match entry {
             Ok(entry) if entry.file_type().is_some_and(|f| f.is_file()) => {
                 let p = entry.into_path();
-                if matches!(
-                    p.extension().and_then(|e| e.to_str()),
-                    Some("ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "py" | "svelte" | "go")
-                ) && !p.to_string_lossy().ends_with(".d.ts")
+                if p.extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(supported_extension)
+                    && !p.to_string_lossy().ends_with(".d.ts")
                 {
                     paths.push(p);
                 }
@@ -1260,10 +1642,10 @@ pub fn scan_cached(root: &Path, cache_path: Option<&Path>) -> Result<Graph> {
 
 pub fn supported_file(file: &str) -> bool {
     !file.ends_with(".d.ts")
-        && matches!(
-            Path::new(file).extension().and_then(|e| e.to_str()),
-            Some("ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" | "py" | "svelte" | "go")
-        )
+        && Path::new(file)
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(supported_extension)
         && !file.split('/').any(|part| {
             part.starts_with('.')
                 || matches!(
@@ -1306,6 +1688,9 @@ fn assemble(
         }
     }
     let known: HashSet<_> = units.iter().map(|u| u.file.clone()).collect();
+    // C/C++ resolve through quoted includes and their sibling implementations;
+    // precompute the per-unit scope indices once for the whole graph.
+    let scopes = include_scopes(&units);
     let mut hasher = Sha256::new();
     for unit in &units {
         hasher.update(unit.file.as_bytes());
@@ -1321,7 +1706,7 @@ fn assemble(
         diagnostics,
         ..Graph::default()
     };
-    for unit in &units {
+    for (unit_index, unit) in units.iter().enumerate() {
         graph.diagnostics.extend(unit.diagnostics.clone());
         graph.nodes.extend(
             unit.nodes
@@ -1330,7 +1715,7 @@ fn assemble(
                 .cloned(),
         );
         for call in &unit.calls {
-            match resolve_call(call, unit, &units, &known) {
+            match resolve_call(call, unit, &units, &known, &scopes, unit_index) {
                 Ok((target, resolution)) => graph.edges.push(Edge {
                     from: call.owner.clone(),
                     to: target.id.clone(),
@@ -1361,11 +1746,13 @@ mod tests {
     fn analyze(files: &[(&str, &str)]) -> Graph {
         let units: Vec<_> = files.iter().map(|(p, s)| parse(p, s).unwrap()).collect();
         let known = units.iter().map(|u| u.file.clone()).collect();
+        let scopes = include_scopes(&units);
         let mut graph = Graph::default();
-        for unit in &units {
+        for (unit_index, unit) in units.iter().enumerate() {
+            graph.diagnostics.extend(unit.diagnostics.clone());
             graph.nodes.extend(unit.nodes.clone());
             for call in &unit.calls {
-                match resolve_call(call, unit, &units, &known) {
+                match resolve_call(call, unit, &units, &known, &scopes, unit_index) {
                     Ok((f, r)) => graph.edges.push(Edge {
                         from: call.owner.clone(),
                         to: f.id.clone(),
@@ -1675,5 +2062,232 @@ mod tests {
         // The masked retry fixes the `abstract` false positive but must still report
         // the real syntax error (line 2), not the masked line 1 property.
         assert_eq!((line, column), (2, 1), "{}", unit.diagnostics[0]);
+    }
+    #[test]
+    fn c_same_file_calls_resolve_and_external_calls_stay_unresolved() {
+        let g = analyze(&[(
+            "main.c",
+            "static int add(int a, int b) { return a + b; }\nint main(void) {\n    add(1, 2);\n    external_call();\n    return 0;\n}\n",
+        )]);
+        assert_eq!(g.diagnostics.len(), 0, "{:?}", g.diagnostics);
+        assert_eq!(g.edges.len(), 1, "{:?}", g.unresolved);
+        assert_eq!(g.edges[0].resolution, "lexical-static");
+        assert!(g.edges[0].to.ends_with(":add"));
+        assert_eq!(g.unresolved.len(), 1);
+        assert_eq!(g.unresolved[0].reason, "external-or-unknown-symbol");
+        let add = g.nodes.iter().find(|n| n.name == "add").unwrap();
+        assert_eq!(add.language, "C");
+        assert_eq!(add.kind, "function");
+        assert_eq!(add.parameters, "(int a, int b)");
+        assert_eq!(add.return_type, "int");
+        assert!(add.class.is_none());
+    }
+    #[test]
+    fn c_quoted_include_and_sibling_definition_resolve_as_include_static() {
+        let g = analyze(&[
+            ("svc/service.h", "int helper(int value);\n"),
+            (
+                "svc/service.c",
+                "#include \"service.h\"\nint helper(int value) { return value + 1; }\n",
+            ),
+            (
+                "app/main.c",
+                "#include \"../svc/service.h\"\nint main(void) { return helper(1); }\n",
+            ),
+        ]);
+        assert_eq!(g.diagnostics.len(), 0, "{:?}", g.diagnostics);
+        assert_eq!(g.edges.len(), 1, "{:?}", g.unresolved);
+        assert_eq!(g.edges[0].resolution, "c-include-static");
+        assert!(g.edges[0].to.ends_with(":helper"));
+        assert!(g.unresolved.is_empty());
+        // The header itself is not a symbol; only the sibling implementation is.
+        assert_eq!(
+            g.nodes
+                .iter()
+                .filter(|n| n.name == "helper" && n.kind == "function")
+                .count(),
+            1
+        );
+    }
+    #[test]
+    fn c_includes_track_only_quoted_local_paths() {
+        let unit = parse(
+            "src/main.c",
+            "#include <stdio.h>\n#include \"service.h\"\n#include \"..\\shared/util.h\"\n",
+        )
+        .unwrap();
+        assert_eq!(unit.includes, vec!["../shared/util.h", "service.h"]);
+    }
+    #[test]
+    fn c_declarations_and_parameters_shadow_calls() {
+        let g = analyze(&[(
+            "shadow.c",
+            "int helper(void) { return 1; }\nint via_parameter(int helper) { return helper(); }\nint via_local(void) { int helper = 0; return helper(); }\n",
+        )]);
+        assert_eq!(g.diagnostics.len(), 0, "{:?}", g.diagnostics);
+        assert_eq!(g.edges.len(), 0);
+        assert_eq!(g.unresolved.len(), 2);
+        assert!(
+            g.unresolved
+                .iter()
+                .all(|call| call.reason == "shadowed-or-assigned-binding"),
+            "{:?}",
+            g.unresolved
+        );
+    }
+    #[test]
+    fn c_function_prototypes_do_not_shadow_calls() {
+        let g = analyze(&[(
+            "proto.c",
+            "int helper(int value);\nint helper(int value) { return value; }\nint main(void) { return helper(1); }\n",
+        )]);
+        assert_eq!(g.edges.len(), 1, "{:?}", g.unresolved);
+        assert_eq!(g.edges[0].resolution, "lexical-static");
+        assert!(g.edges[0].to.ends_with(":helper"));
+    }
+    #[test]
+    fn cpp_inline_methods_and_this_calls_resolve() {
+        let g = analyze(&[(
+            "base.cpp",
+            "class Base {\npublic:\n    void run() { helper(); this->helper(); }\n    void helper() {}\n};\n",
+        )]);
+        assert_eq!(g.diagnostics.len(), 0, "{:?}", g.diagnostics);
+        assert_eq!(g.edges.len(), 2, "{:?}", g.unresolved);
+        assert!(
+            g.edges
+                .iter()
+                .all(|edge| edge.resolution == "same-class-static-candidate")
+        );
+        let helper = g.resolve("helper").unwrap();
+        assert!(g.edges.iter().all(|edge| edge.to == helper));
+        let run = g.nodes.iter().find(|n| n.name == "run").unwrap();
+        assert_eq!(run.kind, "method");
+        assert_eq!(run.class.as_deref(), Some("Base"));
+        assert_eq!(run.language, "C++");
+        assert_eq!(run.parameters, "()");
+    }
+    #[test]
+    fn cpp_out_of_line_methods_constructors_and_destructors_get_classes() {
+        let g = analyze(&[(
+            "base.cpp",
+            "class Base {\npublic:\n    Base();\n    ~Base();\n    void run();\n    void helper();\n};\nvoid Base::run() { helper(); }\nvoid Base::helper() {}\nBase::Base() {}\nBase::~Base() {}\n",
+        )]);
+        assert_eq!(g.diagnostics.len(), 0, "{:?}", g.diagnostics);
+        let run = g.nodes.iter().find(|n| n.name == "run").unwrap();
+        assert_eq!(run.kind, "method");
+        assert_eq!(run.class.as_deref(), Some("Base"));
+        let helper = g.nodes.iter().find(|n| n.name == "helper").unwrap();
+        assert_eq!(helper.class.as_deref(), Some("Base"));
+        let constructor = g.nodes.iter().find(|n| n.name == "Base").unwrap();
+        assert_eq!(constructor.kind, "method");
+        assert_eq!(constructor.class.as_deref(), Some("Base"));
+        let destructor = g.nodes.iter().find(|n| n.name == "~Base").unwrap();
+        assert_eq!(destructor.kind, "method");
+        assert_eq!(destructor.class.as_deref(), Some("Base"));
+        assert_eq!(g.edges.len(), 1, "{:?}", g.unresolved);
+        assert_eq!(g.edges[0].resolution, "same-class-static-candidate");
+        assert_eq!(g.edges[0].to, helper.id);
+    }
+    #[test]
+    fn cpp_namespace_functions_and_templates_are_extracted() {
+        let g = analyze(&[(
+            "app.cpp",
+            "namespace app {\nint freeFunction(int x) { return x; }\nvoid caller() { freeFunction(1); }\ntemplate <typename T>\nT identity(T value) { return value; }\nvoid useTemplate() { identity(2); }\n}\n",
+        )]);
+        assert_eq!(g.diagnostics.len(), 0, "{:?}", g.diagnostics);
+        let free = g.nodes.iter().find(|n| n.name == "freeFunction").unwrap();
+        assert!(free.class.is_none());
+        assert_eq!(free.parameters, "(int x)");
+        assert_eq!(free.return_type, "int");
+        let template = g.nodes.iter().find(|n| n.name == "identity").unwrap();
+        assert_eq!(template.parameters, "(T value)");
+        assert_eq!(template.return_type, "T");
+        assert_eq!(g.edges.len(), 2, "{:?}", g.unresolved);
+        assert!(
+            g.edges
+                .iter()
+                .all(|edge| edge.resolution == "lexical-static")
+        );
+    }
+    #[test]
+    fn cpp_class_static_candidate_and_member_calls_fail_closed() {
+        let g = analyze(&[(
+            "base.cpp",
+            "class Base {\npublic:\n    static int create();\n    void run();\n};\nint Base::create() { return 1; }\nvoid Base::run() {}\nvoid caller() {\n    Base::create();\n    Base b;\n    b.run();\n}\n",
+        )]);
+        assert_eq!(g.diagnostics.len(), 0, "{:?}", g.diagnostics);
+        assert_eq!(g.edges.len(), 1, "{:?}", g.unresolved);
+        assert_eq!(g.edges[0].resolution, "cpp-class-static-candidate");
+        assert!(g.edges[0].to.ends_with(":create"));
+        assert_eq!(g.unresolved.len(), 1);
+        assert_eq!(g.unresolved[0].reason, "dynamic-or-unknown-receiver");
+    }
+    #[test]
+    fn cpp_class_static_candidate_resolves_through_included_header() {
+        let g = analyze(&[
+            (
+                "include/base.hpp",
+                "class Base {\npublic:\n    static int create() { return 1; }\n};\n",
+            ),
+            (
+                "src/main.cpp",
+                "#include \"../include/base.hpp\"\nint main() { return Base::create(); }\n",
+            ),
+        ]);
+        assert_eq!(g.edges.len(), 1, "{:?}", g.unresolved);
+        assert_eq!(g.edges[0].resolution, "cpp-class-static-candidate");
+        assert!(g.edges[0].to.ends_with(":create"));
+    }
+    #[test]
+    fn cpp_overload_ambiguity_is_unresolved() {
+        let g = analyze(&[(
+            "over.cpp",
+            "class Calc {\npublic:\n    int over(int x);\n    int over(double x);\n};\nint Calc::over(int x) { return x; }\nint Calc::over(double x) { return 1; }\nvoid caller() { Calc::over(1); }\n",
+        )]);
+        assert_eq!(g.edges.len(), 0);
+        assert_eq!(g.unresolved.len(), 1);
+        assert_eq!(g.unresolved[0].reason, "dynamic-or-unknown-receiver");
+    }
+    #[test]
+    fn cpp_lambdas_become_anonymous_callbacks() {
+        let g = analyze(&[(
+            "lambda.cpp",
+            "void use() {\n    auto fn = [](int x) { return x + 1; };\n    fn(2);\n}\n",
+        )]);
+        assert_eq!(g.diagnostics.len(), 0, "{:?}", g.diagnostics);
+        let callback = g
+            .nodes
+            .iter()
+            .find(|n| n.name.starts_with("<callback@"))
+            .expect("lambda must become an anonymous callback node");
+        assert_eq!(callback.parameters, "(int x)");
+        assert_eq!(callback.language, "C++");
+        assert_eq!(g.unresolved.len(), 1);
+        assert_eq!(g.unresolved[0].reason, "shadowed-or-assigned-binding");
+    }
+    #[test]
+    fn headers_parse_as_cpp_with_c_fallback() {
+        let cpp_header = parse(
+            "widget.h",
+            "class Base {\npublic:\n    void run() {}\n};\n",
+        )
+        .unwrap();
+        assert!(cpp_header.diagnostics.is_empty(), "{:?}", cpp_header.diagnostics);
+        let run = cpp_header
+            .nodes
+            .iter()
+            .find(|n| n.name == "run")
+            .unwrap();
+        assert_eq!(run.class.as_deref(), Some("Base"));
+        assert_eq!(run.language, "C++");
+        // K&R definitions are valid C but not C++, so the header retry must switch.
+        let c_header = parse("legacy.h", "int knr(a)\n    int a;\n{ return a; }\n").unwrap();
+        assert!(c_header.diagnostics.is_empty(), "{:?}", c_header.diagnostics);
+        let knr = c_header.nodes.iter().find(|n| n.name == "knr").unwrap();
+        assert_eq!(knr.language, "C");
+        // A plain C header parses without a diagnostic too.
+        let plain = parse("util.h", "#include \"common.h\"\nint helper(int value);\n").unwrap();
+        assert!(plain.diagnostics.is_empty(), "{:?}", plain.diagnostics);
+        assert_eq!(plain.includes, vec!["common.h"]);
     }
 }

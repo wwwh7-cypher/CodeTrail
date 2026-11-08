@@ -1,8 +1,8 @@
-# Analysis and evidence contract · 0.4.0
+# Analysis and evidence contract · 0.5.0
 
 ## Supported index
 
-Rust and Tree-sitter index JS/TS/JSX/TSX, Python, Svelte script blocks and Go. Function declarations, lexical functions/methods, anonymous callbacks and module execution are separate nodes. Files larger than 2 MiB are skipped with a diagnostic. Gitignore and generated/dependency directory exclusions apply. Diagnostics represent parsing recovery or unsupported syntax; they are not a language compiler verdict.
+Rust and Tree-sitter index JS/TS/JSX/TSX, Python, Svelte script blocks, Go, C and C++. Function declarations, lexical functions/methods, anonymous callbacks and module execution are separate nodes. Files larger than 2 MiB are skipped with a diagnostic. Gitignore and generated/dependency directory exclusions apply. Diagnostics represent parsing recovery or unsupported syntax; they are not a language compiler verdict.
 
 `id` is a file/line/column location. `symbol_key` records lexical identity independent of line shifts. `content_hash` is a normalized-CRLF function-content hash. Duplicate lexical identities remain ambiguous. File content caching reuses only matching analyzer version and repository root, then globally rebuilds import and symbol resolution. In-memory CLI graph methods remain bounded by actual nodes, and cyclic traversal uses visited sets.
 
@@ -11,6 +11,8 @@ Rust and Tree-sitter index JS/TS/JSX/TSX, Python, Svelte script blocks and Go. F
 Every edge has caller, callee, source file, call-site line and resolution category. Explicit imports, namespace references and lexical scope are resolved conservatively; parameter/local shadowing blocks a package/global match. Unrelated same-name symbols in other files are never linked just because names match. Dynamic object properties, unresolved aliases, interface dispatch, indirect callbacks, runtime imports and unsupported language constructs remain unresolved.
 
 Go handles same-package cross-file direct calls, receiver methods, and statically known typed struct fields including an enclosing method receiver inside a nested handler. Interface implementations are not guessed. Cross-package alias/type inference is incomplete. Svelte reactive/compiler transforms are not executed. TS type resolution and tsconfig aliases are not equivalent to a full compiler.
+
+C/C++ index function definitions (not prototypes). C resolves same-file lexical calls, local quoted `#include` files and sibling implementation files for included headers (candidate edges are tagged `c-include-static`). C++ additionally resolves `this->method()`, unqualified sibling methods inside the same class and unique `Class::method` candidates; those remain static candidates. Member calls on objects/pointers/function pointers need type information and stay unresolved with an explicit reason. System headers are external; no clang/type checker is integrated, and `.h` files are parsed as C++ with a C fallback when that fails.
 
 VS Code can augment a selected neighborhood using installed language providers via prepare/incoming/outgoing Call Hierarchy. The source is `language-service-static`, retains actual call sites, and remains a static candidate. Unsupported providers/timeouts retain the Rust results. Dirty documents invalidate the disk snapshot. Built-in JS/TS provider was tested locally; Go gopls and Python provider availability must be validated in the deployment environment.
 

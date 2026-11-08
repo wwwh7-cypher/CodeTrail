@@ -1,6 +1,6 @@
 # CodeTrail 产品计划 · Agent 改动审核与交互式代码探索
 
-版本：2026-11-08 · 0.4.0 本地工程交付，暂不发布。
+版本：2026-11-08 · 0.4.0 计划记录。0.5.0 已加入 C/C++ 支持，并通过 GitHub Releases 发布；VS Code Marketplace 发布（publisher `wwwh7`）按用户决定暂缓，流程见 docs/RELEASING.md。当前交付状态以 README、VERIFICATION.md 与 extension/CHANGELOG.md 为准，本文件保留最初的产品计划与验收目标，其中“暂不发布 Marketplace”的描述属于当时状态。
 
 本轮已实现 P0–P4 的本地开发能力，并交付 Skill、HTML、Rust CLI、VSIX 和验证脚本。逐项执行证据见 VERIFICATION.md。真人对照研究、真实付费 API 联调、Go/Python 外部语言服务与 Marketplace 发布分别保留其验收条件；没有把这些外部步骤标记为已完成。
 

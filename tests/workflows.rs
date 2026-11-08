@@ -412,3 +412,95 @@ fn deleted_function_memory_retains_baseline_identity_signature_and_reach() {
             .is_empty()
     );
 }
+
+#[test]
+fn cached_c_scan_keeps_include_edges() {
+    let t = Temp::new();
+    t.write("service.h", "int helper(int value);\n");
+    t.write(
+        "service.c",
+        "#include \"service.h\"\nint helper(int value) { return value; }\n",
+    );
+    t.write(
+        "main.c",
+        "#include \"service.h\"\nint main(void) { return helper(1); }\n",
+    );
+    let cache = t.0.join("parse-cache.json");
+    let first = analysis::scan_cached(&t.0, Some(&cache)).unwrap();
+    assert_eq!(first.edges.len(), 1);
+    assert_eq!(first.edges[0].resolution, "c-include-static");
+    // Includes must survive cache serialization or cross-file C edges would regress.
+    let second = analysis::scan_cached(&t.0, Some(&cache)).unwrap();
+    assert_eq!(second.cache_hits, 3);
+    assert_eq!(second.edges.len(), 1);
+    assert_eq!(second.edges[0].resolution, "c-include-static");
+}
+
+#[test]
+fn c_and_cpp_fixture_scan_finds_symbols_and_cross_file_edges() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/cpp-service");
+    let graph = analysis::scan(&root).unwrap();
+    assert_eq!(graph.diagnostics, Vec::<String>::new());
+    assert_eq!(graph.files, 5, "C fixture files must all be discovered");
+    assert!(
+        graph
+            .nodes
+            .iter()
+            .all(|node| matches!(node.language.as_str(), "C" | "C++")),
+        "unexpected language in C/C++ fixture"
+    );
+    let add = graph
+        .nodes
+        .iter()
+        .find(|node| node.name == "service_add")
+        .expect("C function must be extracted");
+    assert_eq!(add.language, "C");
+    assert_eq!(add.kind, "function");
+    assert_eq!(add.parameters, "(int left, int right)");
+    let reset = graph
+        .nodes
+        .iter()
+        .find(|node| node.name == "service_reset")
+        .expect("C void function must be extracted");
+    assert_eq!(reset.return_type, "void");
+    let run = graph
+        .nodes
+        .iter()
+        .find(|node| node.name == "run")
+        .expect("C++ method must be extracted");
+    assert_eq!(run.language, "C++");
+    assert_eq!(run.kind, "method");
+    assert_eq!(run.class.as_deref(), Some("Worker"));
+    let main = graph
+        .nodes
+        .iter()
+        .find(|node| node.name == "main")
+        .expect("C main must be extracted");
+    assert_eq!(main.language, "C");
+    // Cross-file edges: both C callers resolve through the quoted header to the
+    // sibling service.c implementation; the C++ method does the same.
+    let resolved = |from: &str, to: &str| {
+        graph
+            .edges
+            .iter()
+            .any(|edge| edge.from == from && edge.to == to)
+    };
+    for (from, to) in [
+        (main.id.as_str(), add.id.as_str()),
+        (main.id.as_str(), reset.id.as_str()),
+        (run.id.as_str(), add.id.as_str()),
+    ] {
+        assert!(resolved(from, to), "missing resolved edge {from} -> {to}");
+    }
+    assert!(
+        graph
+            .edges
+            .iter()
+            .filter(|edge| edge.to == add.id || edge.to == reset.id)
+            .all(|edge| matches!(
+                edge.resolution.as_str(),
+                "c-include-static" | "lexical-static"
+            )),
+        "C edges must be labeled as static include/local resolution"
+    );
+}

@@ -23,7 +23,7 @@ struct Cli {
 enum Command {
     #[command(
         about = "扫描仓库，生成代码图与静态导览",
-        long_about = "扫描仓库中的 TypeScript/JavaScript/Python/Go/Svelte 文件，构建函数调用图，并输出可离线打开的 HTML 导览与 JSON 图。"
+        long_about = "扫描仓库中的 TypeScript/JavaScript/Svelte/Python/Go/C/C++ 文件，构建函数调用图，并输出可离线打开的 HTML 导览与 JSON 图。"
     )]
     Scan {
         repo: PathBuf,

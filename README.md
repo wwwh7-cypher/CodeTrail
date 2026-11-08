@@ -1,8 +1,8 @@
 # CodeTrail
 
-在 Agent 写代码之后，用模糊搜索与交互式函数调用网络帮助开发者定位、理解和复核修改。核心由 Rust 编写；独立 HTML 与 VS Code Webview 共用同一套阅读和探索逻辑。当前版本 0.4.0，发布者 `wwwh7`。
+在 Agent 写代码之后，用模糊搜索与交互式函数调用网络帮助开发者定位、理解和复核修改。核心由 Rust 编写；独立 HTML 与 VS Code Webview 共用同一套阅读和探索逻辑。当前版本 0.5.0，发布者 `wwwh7`。
 
-[下载预编译版本（GitHub Releases）](https://github.com/wwwh7-cypher/CodeTrail/releases) · [Agent Skill 入口](SKILL.md) · [验证记录与边界](VERIFICATION.md) · [发布说明](docs/RELEASING.md)
+[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail)（发布准备中，当前请先用下方 Releases） · [下载预编译版本（GitHub Releases）](https://github.com/wwwh7-cypher/CodeTrail/releases) · [Agent Skill 入口](SKILL.md) · [验证记录与边界](VERIFICATION.md) · [发布说明](docs/RELEASING.md)
 
 ## 截图
 
@@ -24,8 +24,8 @@
 
 ### 1. VS Code（Windows x64）
 
-1. 从 [Releases](https://github.com/wwwh7-cypher/CodeTrail/releases) 下载 `code-trail-0.4.0-win32-x64.vsix`。
-2. 在 VS Code 扩展视图右上角选择“从 VSIX 安装”，重新加载窗口。
+1. 在扩展视图搜索 **CodeTrail**（publisher `wwwh7`）从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail) 安装（Marketplace 条目发布后生效）；当前可直接从 [Releases](https://github.com/wwwh7-cypher/CodeTrail/releases) 下载 `code-trail-0.5.0-win32-x64.vsix`，选择“从 VSIX 安装”。
+2. 重新加载窗口。
 3. 打开任意本地项目，运行命令 `CodeTrail: 打开架构导览`。
 4. 输入函数缩写、文件名或已有中文职责并回车；单击节点继续展开。`Ctrl+Alt+G` 在编辑器中定位当前函数。
 
@@ -65,8 +65,9 @@ code-trail query <output>/architecture.graph.json search "parseConfig" --limit 2
 ## 平台与分发
 
 - **预编译产物仅 Windows x64**：VSIX 要求 VS Code `^1.100.0`；Skill zip 内含 Windows x64 原生二进制。
+- **分发渠道**：VS Code 插件计划通过 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail)（publisher `wwwh7`）与 GitHub Releases 发布；本轮已发布 GitHub Release `v0.5.0`，Marketplace 发布按计划暂缓（命令见 [docs/RELEASING.md](docs/RELEASING.md)）。Skill/Source zip 只通过 GitHub Releases 发布。
 - **其他平台**需从源码构建：`cargo build --release --locked`，二进制位于 `target/release/code-trail`。Windows 本地可用 `scripts/build.ps1`；`.cargo/config.toml` 仅为 `x86_64-pc-windows-gnu` 目标配置链接器。
-- **未发布 Marketplace**。GitHub Releases 是唯一的预编译分发渠道；`output/` 是本地构建/演示目录（已 gitignore），不进入仓库。
+- `output/` 是本地构建/演示目录（已 gitignore），不进入仓库；预编译资产只从 Marketplace 或 Releases 获取。
 - 仓库不提交生成产物：`bin/`、`extension/bin/`、`extension/LICENSE` 以及 VSIX/Skill/源码 zip 均由构建或打包脚本生成。
 
 ## 构建与测试
@@ -77,8 +78,8 @@ cargo +stable-x86_64-pc-windows-gnu test --locked
 npm --prefix extension ci
 npm --prefix extension run test:unit
 npm --prefix extension run test:vscode
-npm --prefix extension run package      # output/code-trail-0.4.0-win32-x64.vsix
-python scripts/package-skill.py         # output/*.zip，需先构建 bin/
+npm --prefix extension run package      # output/code-trail-<version>-win32-x64.vsix
+python scripts/package-skill.py         # output/code-trail-<version>-{skill,source}.zip，需先构建 bin/
 node scripts/render-doc-screenshots.cjs # 重新生成 docs/screenshots/*.png
 ```
 
@@ -90,7 +91,7 @@ node scripts/render-doc-screenshots.cjs # 重新生成 docs/screenshots/*.png
 
 ## 解释边界
 
-支持 TS/TSX/JS/JSX/Svelte script/Python/Go 的语法索引；Go 支持同包函数、已知接收者与有明确结构字段类型的静态候选调用。解析器发生语法恢复时，诊断以 `path:line:col: ...` 形式给出；它只说明该文件在此处的静态索引可能不完整，不等同于项目编译失败。接口分派、动态回调连接、外部包和框架注册可能需要语言服务或人工复核；语言服务同样只是静态证据，不能证明完整运行时影响。
+支持 TS/TSX/JS/JSX、Svelte script、Python、Go、C 与 C++ 的语法索引。Go 支持同包函数、已知接收者与有明确结构字段类型的静态候选调用。C/C++ 只把函数定义建为节点（原型不是节点）：C 解析同文件词法调用、本地引号 `#include` 文件与头文件对应的同目录实现文件（静态候选边标记为 `c-include-static`）；C++ 额外解析 `this->method()`、同一类内的非限定兄弟方法与唯一的 `Class::method` 候选。对象/指针/函数指针上的成员调用需要类型信息，会以明确原因保持未解析（属于静态缺口，不是源码错误）；系统头文件按外部依赖处理，未集成 clang/类型检查器。解析器发生语法恢复时，诊断以 `path:line:col: ...` 形式给出；它只说明该文件在此处的静态索引可能不完整，不等同于项目编译失败。接口分派、动态回调连接、外部包和框架注册可能需要语言服务或人工复核；语言服务同样只是静态证据，不能证明完整运行时影响。
 
 模块边只聚合已解析的跨模块函数调用；HTTP 关联需要单独证据，不会被冒充为函数调用。VS Code 运行时额外提供源码跳转、原生 diff、持久化复核状态、SecretStorage 与可选语言服务补强；离线 HTML 对这些入口给出明确说明。
 
@@ -99,6 +100,7 @@ node scripts/render-doc-screenshots.cjs # 重新生成 docs/screenshots/*.png
 ## 文档
 
 - [VERIFICATION.md](VERIFICATION.md)：本机实际执行结果、证据位置与未覆盖边界。
+- [extension/CHANGELOG.md](extension/CHANGELOG.md)：版本变更记录。
 - [PRODUCT_PLAN.md](PRODUCT_PLAN.md)：产品计划与验收目标；目标指标不等于已证实的实用效果。
 - [USER_TEST_PROTOCOL.md](USER_TEST_PROTOCOL.md)：真人对照验收方法。
 - [SKILL.md](SKILL.md)：Agent Skill 使用入口。

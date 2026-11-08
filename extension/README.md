@@ -1,7 +1,12 @@
 # CodeTrail — 看懂 Agent 改动，从函数开始
 
-CodeTrail 在 VS Code 内展示可交互的函数调用网络，帮助开发者定位代码、逐步展开上下文并复核 Git 修改。Rust 负责代码索引和图查询；模型只解释函数职责。
+CodeTrail 在 VS Code 内展示可交互的函数调用网络，帮助开发者定位代码、逐步展开上下文并复核 Git 修改。Rust 负责代码索引和图查询；模型只解释函数职责。当前版本 0.5.0，发布者 `wwwh7`。
 
+## 安装
+
+1. 在 VS Code 扩展视图搜索 **CodeTrail**（publisher `wwwh7`），或打开 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail)。Marketplace 页面在发布前可能暂时不可用。
+2. 也可从 [GitHub Releases](https://github.com/wwwh7-cypher/CodeTrail/releases) 下载 `code-trail-<version>-win32-x64.vsix`，在扩展视图右上角选择 **从 VSIX 安装**。
+3. 预编译包目标为 **Windows x64**；其他平台需从源码构建（见仓库根目录 README）。安装后重新加载窗口。
 
 ## 使用
 
@@ -11,7 +16,7 @@ CodeTrail 在 VS Code 内展示可交互的函数调用网络，帮助开发者�
 4. 切换 **功能模块** 查看目录/包边界与跨模块调用，点击模块进入函数。
 5. 运行 **CodeTrail: 审查 Git 修改影响**，选择基线；在当前/基线版本之间查看新增、修改、删除节点与调用边，打开原生 diff 并标记复核状态。
 
-支持 TS、TSX、JS、JSX、Svelte script、Python 和 Go 的基础语法索引。VS Code 内按需使用可用语言扩展的 Call Hierarchy 补强关系；动态分派、外部依赖和框架隐式连接仍可能遗漏。未解析调用数量不代表错误率。
+支持 TS、TSX、JS、JSX、Svelte script、Python、Go、C 与 C++ 的语法索引。C/C++ 只索引函数定义（原型不是节点）：C 解析同文件调用、本地引号 `#include` 文件与头文件对应的同目录实现文件，静态候选边标记为 `c-include-static`；C++ 额外解析 `this->method()`、同类非限定兄弟方法与唯一的 `Class::method` 候选。对象/指针/函数指针上的成员调用需要类型信息，会以明确原因保持未解析（属于静态缺口，不是源码错误）；系统头文件按外部依赖处理，未集成 clang。VS Code 内按需使用可用语言扩展的 Call Hierarchy 补强关系；动态分派、外部依赖和框架隐式连接仍可能遗漏。未解析调用数量不代表错误率。
 
 ## API URL、Model 与 API Key
 
@@ -40,10 +45,11 @@ CodeTrail 在 VS Code 内展示可交互的函数调用网络，帮助开发者�
 - Git 图说明潜在静态可达性，不证明运行时行为变化、审查充分性或合并安全。
 - 模块视图按实际路径分组，可配置名称与范围；跨服务 HTTP 关联不伪装为直接函数调用。
 - 本机指标只记录使用与错误计数，没有远程遥测。
-- 此扩展使用本机 Rust 可执行文件，需要受信任的本地工作区。当前交付包为 Windows x64。
+- C/C++ 是静态语法索引：只索引函数定义，接口分派、成员类型推断与函数指针调用可能缺边；未解析数量不代表错误率。
+- 此扩展使用本机 Rust 可执行文件，需要受信任的本地工作区。预编译包为 Windows x64。
 
-## 本地安装
+## 支持与反馈
 
-在扩展视图中选择 **从 VSIX 安装**，使用交付的 `code-trail-0.4.0-win32-x64.vsix`。
-
-发布者为 `wwwh7`。当前为本地评审交付，尚未发布到 Marketplace。
+- Marketplace：<https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail>（publisher `wwwh7`；Marketplace 条目发布前请使用 Releases 的 VSIX）。
+- GitHub：<https://github.com/wwwh7-cypher/CodeTrail>；问题反馈：<https://github.com/wwwh7-cypher/CodeTrail/issues>；预编译包：<https://github.com/wwwh7-cypher/CodeTrail/releases>。
+- 版本变更见仓库内 `CHANGELOG.md`。本项目未发布到其他扩展市场。

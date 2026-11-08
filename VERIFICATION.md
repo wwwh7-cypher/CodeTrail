@@ -1,10 +1,32 @@
-# CodeTrail 0.4.0 本地交付验证
+# CodeTrail 0.5.0 验证
 
-日期：2026-11-08。发布者：`wwwh7`。交付通过 GitHub Releases 分发 Windows x64 VSIX、Skill 与源码包；未发布 VS Code Marketplace。
+日期：2026-11-08。发布者：`wwwh7`。发布渠道：GitHub Releases（本轮已发布）；VS Code Marketplace 发布按用户决定暂缓，0.5.0 的 Marketplace 发布命令见 `docs/RELEASING.md`。
 
-本文件记录开发机上的实际执行结果。表中 `output/...` 证据是本机验证产物，已被 gitignore、不随仓库分发；预编译 VSIX、Skill 与源码包通过 [GitHub Releases](https://github.com/wwwh7-cypher/CodeTrail/releases) 分发。所有结果均来自下方“复现”命令与最终构建。
+本文件记录开发机上的实际执行结果。表中 `output/...` 证据是本机验证产物，已被 gitignore、不随仓库分发；预编译 VSIX、Skill 与源码包通过 GitHub Releases（以及后续 Marketplace）分发。0.5.0 结果来自加入 C/C++ 支持后的最终构建。
 
-## 实际验证结果
+## 0.5.0 最终验证
+
+| 检查 | 结果 | 可核对证据 |
+| --- | --- | --- |
+| Rust 单元与工作流 | 56 项通过（36 + 4 + 16），0 警告 | output/eval/final-cargo-test-050.log |
+| C/C++ 语法与静态关系回归 | 13 个单元回归 + 2 个集成回归通过；覆盖 .c/.h/.cpp/.hpp、`c-include-static`、C++ `this->`/同族方法与唯一 `Class::method` 候选、成员调用未解析原因、.h 的 C 回退、缓存保留 include 边。示例工程扫描：5 文件 / 5 函数 / 3 条 `c-include-static` 边 / 1 处 `printf` 外部调用未解析 / 0 诊断 | output/eval/final-cargo-test-050.log、output/eval/cpp-service.graph.json、output/eval/shots/cpp-service.png、examples/cpp-service/ |
+| API / 复核状态测试 | 3 项通过 | output/extension-unit.log |
+| VS Code Extension Host | 10 组集成场景通过；本机 VS Code 1.145.2 | output/vscode-test/extension-host-evidence.json |
+| 浏览器回归 | 15 组通过；页面 JavaScript 错误 0；10k 符号输入 p95 46.8 ms（同一机器不同运行存在波动） | output/browser-test/evidence.json |
+| VSIX 安装 | 独立用户/扩展目录成功安装 wwwh7.code-trail@0.5.0；VSIX 内含 changelog/readme/LICENSE/icon/bin | output/vsix-smoke-050 |
+| Marketplace 安装 | 本轮按用户决定暂缓发布；发布后可用 `https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail` 安装 | <https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail> |
+| 打包核对 | `vsce package --target win32-x64` 生成 16 个文件 / 3.81 MB；内置 14.43 MB 原生二进制；按 .vscodeignore 排除 node_modules 与测试文件；图标优化为 51.6 KB（256×256） | output/code-trail-0.5.0-win32-x64.vsix |
+| Skill 元数据 | 沿用上轮的 quick_validate.py 通过结果；本轮 SKILL.md 仅更新语言说明与发布渠道文案 | 本地 skill-creator 校验 |
+| MCP | 实际子进程 stdio initialize、tools/list、search、neighbors 通过 | output/native-test/evidence.json |
+| 无 Key 的 Skill 说明 | 沿用 0.4.0 验证：当前会话读取源码，分三批校验写入 27 个 Go 函数说明；本轮未改动叙述与校验链路 | output/research-atlas/backend-source-batch-*.json / backend-annotations-*.json |
+
+搜索与关系样例：30 条预设查询中 29 条进入前五（96.7%）；九个人工关系样例 TP=6、FP=0、FN=0；原生 CLI 10k 符号 p95 142.9 ms。样本很小且为本机测量，不能外推整仓库准确率或跨机器性能。
+
+## 0.4.0 基线记录（已执行，保留参考）
+
+以下数字来自 0.4.0 最终构建的实际执行，**不是 0.5.0 结果**；0.5.0 加入 C/C++ 支持后需在最终构建上重跑。
+
+### 实际验证结果
 
 | 检查 | 结果 | 可核对证据 |
 | --- | --- | --- |
@@ -22,7 +44,7 @@ VS Code 场景实际覆盖：真实项目扫描、增量缓存、Git 修改、�
 
 浏览器覆盖：缩写与键盘搜索、连续 10 次邻居点击、旧坐标保留、共享节点去重、固定/收起/前进后退、快速切换与减少动态效果、层级增减、模块下钻、Markdown 阅读/编辑/确认导出、API 表单、独立 SVG、1200/960/600 px 布局、Go 回调与类型字段关系、源码刷新身份映射、删除函数基线和复核标记。
 
-## 真实验证项目
+### 真实验证项目
 
 - 目录：`E:/work/research-atlas/app`（本机验证路径；复现时用 `CODETRAIL_REAL` 指向任意真实 Git 项目，缺失时集成测试会打印跳过说明）。
 - Git HEAD：`e3e777bf416937fe2ab799b1dbfb284490531b27`。
@@ -33,19 +55,19 @@ VS Code 场景实际覆盖：真实项目扫描、增量缓存、Git 修改、�
 - `HEAD~1 → HEAD`：已导出真实提交审查，保留新增、修改、删除以及非函数文件；这些数目不是风险评分。
 - 前端示例默认从 parseBibliography 展开。Go 后端示例默认从 Answer 展开，模块图按 HTTP、检索、存储、模型适配等实际文件分组。
 
-文件诊断当前只有一份超出大小限制的生成脚本；此前六处解析恢复提示是 tree-sitter-typescript 对 `abstract` 属性名的误报，已在本轮修复（见“本轮修复与清理”）。诊断不能被当作源代码编译错误结论；诊断以 `path:line:col: ...` 形式标出发生语法恢复的位置。静态图中未解析数量也不能当作准确率。
+文件诊断当前只有一份超出大小限制的生成脚本；此前六处解析恢复提示是 tree-sitter-typescript 对 `abstract` 属性名的误报，已在该轮修复。诊断不能被当作源代码编译错误结论；诊断以 `path:line:col: ...` 形式标出发生语法恢复的位置。静态图中未解析数量也不能当作准确率。
 
-## 搜索与关系样例
+### 搜索与关系样例
 
 30 条本项目内预设查询（15 条标识符缩写 + 15 条中文职责）中，29 条目标进入前五，比例 96.7%。未进入前五的是 `pRis → parseRis`（当前全项目原生查询中第六）；界面可补充路径/职责词缩小范围。
 
-10,000 个合成符号：浏览器 30 次输入到下一帧的 p95，本轮最终构建重跑为 **56.6 ms**（上一轮为 43.6 ms；同一台机器不同运行存在波动，不构成性能承诺）。另测原生 CLI 20 次启动、读图和搜索，p95 为 **106.8 ms**，包含进程和 JSON 读取开销。这两个指标的范围不同。样例由真实符号复制构建，本机无头 Chromium 测量；不代表所有项目或设备。
+10,000 个合成符号：浏览器 30 次输入到下一帧的 p95，0.4.0 最终构建重跑为 **56.6 ms**（上一轮为 43.6 ms；同一台机器不同运行存在波动，不构成性能承诺）。另测原生 CLI 20 次启动、读图和搜索，p95 为 **106.8 ms**，包含进程和 JSON 读取开销。这两个指标的范围不同。样例由真实符号复制构建，本机无头 Chromium 测量；不代表所有项目或设备。
 
-九个人工设定关系回归样例包含 TS 本地与显式导入、Svelte、Python、Go 同包与结构字段，以及遮蔽/动态接收者反例。本样例 TP=6、FP=0、FN=0（本样例 precision/recall=1），样本很小，不能外推整个真实仓库的解析准确率。
+九个人工设定关系回归样例包含 TS 本地与显式导入、Svelte、Python、Go 同包与结构字段，以及遮蔽/动态接收者反例。本样例 TP=6、FP=0、FN=0（本样例 precision/recall=1），样本很小，不能外推整个真实仓库的解析准确率。C/C++ 回归样例的最终结果待 0.5.0 构建后填写。
 
-## 本轮修复与清理（2026-11-08 第二轮，版本仍为 0.4.0）
+### 0.4.0 已完成的修复与清理（2026-11-08 第二轮）
 
-### TypeScript `abstract` 属性误报（P0）
+#### TypeScript `abstract` 属性误报（P0，已包含在 0.5.0 中）
 
 - 根因：`tree-sitter-typescript 0.23.2`（crates.io 最新版）把 `abstract` 当作关键字，且该关键字不在语法允许作为标识符的 `_reserved_identifier` 列表中。因此 `interface X { abstract?: string }`、`abstract(): void`、`class { abstract = 1 }`、类型字面量等合法 TypeScript 代码会触发解析恢复，被误报为“未支持语法”；只有类型声明的文件（如 `types.ts`）不会产出符号。
 - 修复：在 `src/analysis.rs` 的解析流程中，仅当首次解析出现错误且文件类型为 ts/tsx/svelte 时，用等长掩码重试：只把属性位置的 `abstract` 替换为等长标识符 `abs_trac`，重试无错误才采用该语法树；所有名称、签名、正文与哈希仍从原始源码读取（字节偏移一致）。`abstract class` / `abstract new` 等修饰符位置不受影响。
@@ -53,7 +75,7 @@ VS Code 场景实际覆盖：真实项目扫描、增量缓存、Git 修改、�
 - 诊断文本同时增加首个错误/缺失节点的 1-based `path:line:col:`。
 - 残留：若 `abstract` 与后续 token 之间夹注释（如 `abstract /*x*/: string`）仍不会触发掩码；Svelte `<script>` 之外的标记本就不解析。
 
-### 界面（P0）
+#### 界面（P0，已包含在 0.5.0 中）
 
 - 诊断可见：统计区新增“分析边界”按钮，展示 `N 个文件不完整`；点击该按钮、顶部“分析边界”或统计第 4 项均可打开边界弹窗，列出文件诊断、未纳入图调用的按原因聚合（12 类）与下一步建议。
 - 审核队列降噪：匿名回调 `<callback@…>` 默认折叠为“显示 N 个匿名回调变更”，位于具名变更之前；展开状态跨重渲染保留。示例：代码仓初始导入的 review 页为 185 个具名函数变更 + 486 个匿名回调 + 71 个文件/非函数修改。
@@ -61,7 +83,7 @@ VS Code 场景实际覆盖：真实项目扫描、增量缓存、Git 修改、�
 - 统计文案：第 4 项改为“未纳入图的调用”，取消橙色强调，点击查看原因分布。
 - 扁平仓库模块兜底：只有单一目录分组时按文件分组（`examples/config-service` 由 1 个 `(root)` 变为 5 个文件模块），并支持进入文件层级与动态范围选项。
 
-### CLI 与工程（P1）
+#### CLI 与工程（P1，已包含在 0.5.0 中）
 
 - `--help` 为 10 个顶层子命令、7 个 query 操作、7 个 memory 操作补齐中文 about/long_about（24 处），新增帮助文本回归测试。
 - 去掉脚本/测试中的个人绝对路径：浏览器工具统一由 `scripts/lib/browser-env.cjs` 解析（`PLAYWRIGHT_MODULE` / `CHROMIUM_PATH` 可覆盖）；VS Code 集成测试改用 `CODETRAIL_REAL` / `CODETRAIL_VSCODE`，缺失时打印跳过说明或明确错误。
@@ -79,11 +101,11 @@ Skill 与 BYOK 都使用 snapshot/id/content_hash/title/summary 契约，并由 
 
 ## 待外部验收
 
-1. 没有调用用户实际付费 API。本轮网络协议、模型列表、认证失败、错误摘要、重复/未知函数、快照/哈希和额外字段由本机 HTTP mock 验证。真实地址、Key、Model 的联调需由对应服务配置支持。
-2. 实际 VS Code JS/TS Call Hierarchy 已通过。Go 和 Python 语言服务补强使用相同 provider 接口，但本机没有单独验收 gopls/Python 调用层级。Go 示例来自已测试的 Rust 语法和类型字段索引；接口分派、跨包类型关系和动态路由仍可能缺边。
+1. 没有调用用户实际付费 API。网络协议、模型列表、认证失败、错误摘要、重复/未知函数、快照/哈希和额外字段由本机 HTTP mock 验证。真实地址、Key、Model 的联调需由对应服务配置支持。
+2. 实际 VS Code JS/TS Call Hierarchy 已通过。Go、Python、C、C++ 的语言服务补强使用相同 provider 接口，但本机没有单独验收 gopls/Python/clangd 调用层级；C/C++ 本身未集成 clang 或类型检查器，接口分派、成员类型推断、对象/指针/函数指针调用与跨包语义仍可能缺边。
 3. 动画用 requestAnimationFrame 与非线性 ease-out 实现，验证了中断、稳定坐标与减少动态效果。没有给出跨设备 60 fps 保证。
 4. 真人任务对照、约 30% 时间改善、七日留存、BYOK 完成率与付费意愿尚未测量。使用 USER_TEST_PROTOCOL.md 收集真实参与者数据。
-5. Marketplace 保持未发布，也没有使用 Marketplace 发布凭据。仓库与 GitHub Releases 是唯一分发渠道，Release 资产由维护者手动上传。
+5. Marketplace 发布：0.5.0 计划发布到 VS Code Marketplace（publisher `wwwh7`）；发布状态以 Marketplace 页面为准。本机验证不使用 Marketplace 发布凭据，仓库内不保存 PAT；GitHub Releases 资产由维护者手动上传。
 
 ## 复现
 
@@ -102,11 +124,16 @@ python scripts/package-skill.py
 node scripts/render-doc-screenshots.cjs
 ```
 
-实际项目测试目录、VS Code 可执行文件、Playwright 模块与 Chromium 路径可用 `CODETRAIL_REAL`、`CODETRAIL_VSCODE`、`PLAYWRIGHT_MODULE`、`CHROMIUM_PATH` 覆盖（见 README 开发章节与 `scripts/lib/browser-env.cjs`）。`bin/code-trail.exe` 与 `extension/bin/code-trail.exe` 都是构建产物：先运行 `pwsh -File scripts/build.ps1`；全新克隆在 `npm --prefix extension run test:vscode` 前还需执行 `npm --prefix extension run package`（或手动复制二进制到 `extension/bin/`），因为该目录不再提交到仓库。若 shell 设置了 `ELECTRON_RUN_AS_NODE=1`，运行 `test:vscode` 前需要先移除。浏览器回归的 review.html 由 verify-native.mjs 提前生成。快照图和 HTML 含源码片段，仅供用户请求的本地评审。
+实际项目测试目录、VS Code 可执行文件、Playwright 模块与 Chromium 路径可用 `CODETRAIL_REAL`、`CODETRAIL_VSCODE`、`PLAYWRIGHT_MODULE`、`CHROMIUM_PATH` 覆盖（见 README 开发章节与 `scripts/lib/browser-env.cjs`）。`bin/code-trail.exe` 与 `extension/bin/code-trail.exe` 都是构建产物：先运行 `pwsh -File scripts/build.ps1`；全新克隆在 `npm --prefix extension run test:vscode` 前还需执行 `npm --prefix extension run package`（或手动复制二进制到 `extension/bin/`），因为该目录不再提交到仓库。若 shell 设置了 `ELECTRON_RUN_AS_NODE=1`，运行 `test:vscode` 前需要先移除。浏览器回归的 review.html 由 verify-native.mjs 提前生成。`scripts/package-skill.py` 从 `Cargo.toml` 读取版本号生成 `code-trail-<version>-skill.zip` / `-source.zip`。快照图和 HTML 含源码片段，仅供用户请求的本地评审。
 
-## 发布资产（GitHub Release `v0.4.0`）
+## 发布资产（`v0.5.0`）
 
-- 下载：<https://github.com/wwwh7-cypher/CodeTrail/releases/tag/v0.4.0>
-- `code-trail-0.4.0-win32-x64.vsix`（4,503,305 字节）：SHA-256 `CCA75DB0C66295DAA05CCA8FCC497288C94AC3DFD6A2A103844EB234FD79A5DA`
-- `code-trail-0.4.0-skill.zip`（4,490,701 字节）：SHA-256 `FD1FA3111C557C86BBF2E06C5F7A4681A1C1DCDA84013293BD9DDDFD82459E7C`
-- `code-trail-0.4.0-source.zip`（9,365,520 字节）：SHA-256 `637381B695932CAFA085AFA639A310394D376B87315F20963823EA7306AE3099`
+- GitHub Release：<https://github.com/wwwh7-cypher/CodeTrail/releases/tag/v0.5.0>
+- VS Code Marketplace：<https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail>（本轮暂缓发布，发布前页面不可用）
+- `code-trail-0.5.0-win32-x64.vsix`：Windows x64 VS Code 插件（含原生二进制与界面资源）
+- `code-trail-0.5.0-skill.zip`：可直接放入 Agent `skills/code-trail` 的 Skill（含原生二进制）
+- `code-trail-0.5.0-source.zip`：源码与构建脚本
+
+三个资产的大小与 SHA-256 由发布流程计算后写入 GitHub Release 说明（本文件也随 skill/source zip 分发，若在文中内嵌 zip 自身哈希会造成自引用变化，因此不在仓库内重复列出）。下载后可对照 Release 说明校验。
+
+上一轮 0.4.0 的发布资产与 SHA-256 保留在 Git 历史中（0.4.0 最终提交），不再列在这里以免与 0.5.0 混淆。
