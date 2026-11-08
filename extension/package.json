@@ -1,0 +1,176 @@
+{
+  "name": "code-trail",
+  "displayName": "CodeTrail — 架构导览与 AI 修改审查",
+  "description": "Rust 静态代码图：入口路径、Git 修改影响、BYOK 职责叙述与有界架构记忆。",
+  "version": "0.4.0",
+  "publisher": "wwwh7",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "architecture",
+    "call graph",
+    "code review",
+    "BYOK",
+    "MCP"
+  ],
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "main": "./out/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeTrail.open",
+        "title": "CodeTrail: 打开架构导览"
+      },
+      {
+        "command": "codeTrail.focus",
+        "title": "CodeTrail: 在调用图定位当前函数"
+      },
+      {
+        "command": "codeTrail.review",
+        "title": "CodeTrail: 审查 Git 修改影响"
+      },
+      {
+        "command": "codeTrail.settings",
+        "title": "CodeTrail: API URL / Model 设置"
+      },
+      {
+        "command": "codeTrail.claimClipboard",
+        "title": "CodeTrail: 从剪贴板读取 Agent 声明"
+      },
+      {
+        "command": "codeTrail.claimFile",
+        "title": "CodeTrail: 从文件读取 Agent 声明"
+      },
+      {
+        "command": "codeTrail.memory",
+        "title": "CodeTrail: 打开架构记忆"
+      },
+      {
+        "command": "codeTrail.mcpConfig",
+        "title": "CodeTrail: 导出只读 MCP 配置"
+      },
+      {
+        "command": "codeTrail.metrics",
+        "title": "CodeTrail: 查看本机使用指标"
+      },
+      {
+        "command": "codeTrail.clearKey",
+        "title": "CodeTrail: 删除当前 API Key"
+      }
+    ],
+    "configuration": {
+      "title": "CodeTrail",
+      "properties": {
+        "codeTrail.provider": {
+          "type": "string",
+          "enum": [
+            "openai-compatible",
+            "anthropic"
+          ],
+          "default": "openai-compatible",
+          "description": "BYOK API 协议。Key 单独保存于 SecretStorage。"
+        },
+        "codeTrail.apiBaseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "API Base URL，例如 https://api.openai.com/v1 或 https://api.anthropic.com/v1。也支持完整的 /chat/completions 或 /messages URL。"
+        },
+        "codeTrail.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model ID。手动输入你的 API 支持的模型，或在 CodeTrail API 设置中获取模型列表。"
+        },
+        "codeTrail.modelsUrl": {
+          "type": "string",
+          "default": "",
+          "description": "可选模型列表接口 URL；留空时使用 API Base URL 下的 /models。该接口会收到对应地址的 API Key。"
+        },
+        "codeTrail.binaryPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "可选本机 Rust CLI 绝对路径。默认使用 VSIX 内的原生二进制。"
+        },
+        "codeTrail.reviewBase": {
+          "type": "string",
+          "default": "HEAD",
+          "description": "Git 审查基线，支持分支名和 commit。"
+        },
+        "codeTrail.entries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "显式入口函数名或稳定 ID；不填时使用静态候选入口。"
+        },
+        "codeTrail.autoRefresh": {
+          "type": "boolean",
+          "default": false,
+          "description": "源文件变化后自动重新扫描；关闭时标记当前图已过期。"
+        },
+        "codeTrail.localMetrics": {
+          "type": "boolean",
+          "default": true,
+          "description": "只在本机保存使用计数：7 天复用、BYOK 配置、扫描和错误次数。无远程遥测。"
+        }
+      }
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "codeTrail.open",
+          "when": "resourceExtname =~ /\\.(ts|tsx|js|jsx|py|svelte|go)$/",
+          "group": "navigation"
+        },
+        {
+          "command": "codeTrail.focus",
+          "when": "resourceExtname =~ /\\.(ts|tsx|js|jsx|py|svelte|go)$/",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "codeTrail.focus",
+        "key": "ctrl+alt+g",
+        "mac": "cmd+alt+g",
+        "when": "editorTextFocus"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "test:unit": "npm run compile && node --test out/test/unit/*.test.js",
+    "test:vscode": "npm run compile && node out/test/run.js",
+    "test": "npm run test:unit && npm run test:vscode",
+    "vscode:prepublish": "npm run compile",
+    "package": "node scripts/package.mjs",
+    "publish:marketplace": "node scripts/publish.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.100.0",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.1.0",
+    "typescript": "^5.9.3"
+  }
+}

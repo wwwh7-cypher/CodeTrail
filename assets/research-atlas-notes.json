@@ -1,0 +1,24 @@
+{
+  "src/lib/domain/import-bibliography.ts": {
+    "parseBibliography": {"title":"识别并解析文献","summary":"清理导入文本，识别格式，再交给 BibTeX、RIS 或 CSL 解析器。"},
+    "detectFormat": {"title":"识别文献格式","summary":"检查文本开头与格式标记，区分 CSL、RIS、BibTeX 和未知格式。"},
+    "parseBibtex": {"title":"解析 BibTeX 条目","summary":"读取文献条目与字段，整理标题、作者、年份和 DOI，并记录异常。"},
+    "splitAuthors": {"title":"拆分作者姓名","summary":"按 and 分隔作者，清理姓名空白，并去掉空值。"},
+    "parseRis": {"title":"解析 RIS 条目","summary":"逐行读取 RIS 标签，将作者、题名和来源等字段归入文献条目。"},
+    "parseCslJson": {"title":"解析 CSL 文献 JSON","summary":"解析 CSL JSON 数据，将文献信息转换为统一的导入条目。"},
+    "failedEntry": {"title":"记录导入错误","summary":"创建带格式、错误原因和警告的失败条目，便于界面提示问题。"},
+    "emptyEntry": {"title":"创建文献空条目","summary":"初始化标题、作者、年份、来源、DOI 等文献字段。"},
+    "scanGroup": {"title":"读取成对括号内容","summary":"匹配括号结束位置，跳过转义字符，避免引号中的括号提前结束解析。"},
+    "parseBibtexFields": {"title":"读取 BibTeX 字段","summary":"解析条目的字段名和值，保留宏表与解析警告。"},
+    "parseBibtexValue": {"title":"读取 BibTeX 字段值","summary":"读取引号、括号和宏组成的字段值，返回值及下一个解析位置。"},
+    "decodeLatex": {"title":"解码常见 LaTeX 转义","summary":"转换常见的 BibTeX 重音符号与转义文本；复杂宏不展开。"},
+    "normalizeImportDOI": {"title":"统一 DOI 格式","summary":"去掉 DOI 前缀与首尾空白，经 DOI 处理函数规范化后转为小写。"},
+    "normalizeImportTitle": {"title":"统一文献标题","summary":"将标题转为小写，移除非字母和数字字符，供后续比较。"},
+    "yearFromText": {"title":"从文本提取年份","summary":"提取四位年份，并只接受 1000 到 2999 之间的值。"},
+    "collapse": {"title":"清理文本空白","summary":"将连续空白压缩为一个空格，再移除首尾空白。"}
+  },
+  "src/lib/components/ImportDialog.svelte": {
+    "previewBibliography": {"title":"预览文献导入结果","summary":"检查待导入文本，调用文献解析器，将结果留给导入预览界面。"},
+    "pickBibFile": {"title":"读取所选文献文件","summary":"读取用户选择的文献库文件，并继续进入文献内容解析。"}
+  }
+}

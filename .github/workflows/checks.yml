@@ -1,0 +1,30 @@
+name: CodeTrail checks
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  check:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - run: npm ci
+        working-directory: extension
+      - run: npm run test:unit
+        working-directory: extension
+      - run: node extension/scripts/package.mjs --binary=target/release/code-trail
+        if: runner.os != 'Windows'
+      - run: node extension/scripts/package.mjs --binary=target/release/code-trail.exe
+        if: runner.os == 'Windows'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: code-trail-${{ runner.os }}
+          path: output/*.vsix

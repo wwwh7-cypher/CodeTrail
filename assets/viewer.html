@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>CodeTrail · 让每一次理解，都有迹可循</title>
+<style>/*__VIEWER_STYLE__*/</style>
+</head>
+<body>
+<script id="graph-data" type="application/json">/*__GRAPH_DATA__*/</script>
+<div class="shell">
+<aside class="sidebar">
+ <div><div class="logo"><span class="mark">⌘</span>CodeTrail<span style="font:9px var(--mono);color:var(--subtle);align-self:flex-end;margin-bottom:3px">/ 01</span></div><div class="subtitle">FOLLOW THE EVIDENCE</div></div>
+ <div class="repo"><span class="accent mono">▱</span><div style="min-width:0"><div class="repo-name" id="repo-name"></div><div class="small subtle">本地静态快照</div></div><span class="dot" style="margin-left:auto"></span></div>
+ <div><div class="section-label">WORKSPACE</div><nav class="nav" aria-label="工作模式"><button class="active" data-mode="tour"><span>↳</span>架构导览<span class="key">01</span></button><button data-mode="review"><span>⌁</span>修改影响<span class="key">02</span></button><button data-mode="memory"><span>▤</span>架构记忆<span class="key">03</span></button></nav></div>
+ <div class="explorer"><div class="section-label">FUNCTION EXPLORER</div><input id="search" class="search" type="search" placeholder="查找函数…  Ctrl K" aria-label="查找函数"><div id="file-list" class="file-list"></div></div>
+ <div class="sidebar-bottom"><span class="dot"></span> RUST CORE · LOCAL ONLY<br>没有 LLM 调用<br>代码与图均保留在本地<br><span id="scan-time"></span></div>
+</aside>
+<main class="main">
+ <header class="topbar"><div><span id="crumb"></span><span class="crumb-extra"> / architecture</span> / <span class="accent" id="mode-crumb">tour</span></div><div class="top-actions"><span class="badge"><span class="dot"></span> STATIC</span><button id="theme" aria-label="切换明暗主题">☼</button><button id="api-settings-button">API 设置</button><button id="help" aria-label="使用说明">?</button></div></header>
+ <section class="intro"><div><div class="eyebrow" id="eyebrow">01 / GUIDED UNDERSTANDING</div><h1 id="headline">从一个入口，走进代码。</h1><p id="description">先看一条可走的路径，再展开你关心的细节。</p></div><div class="intro-note">STRUCTURE FROM CODE.<br>UNDERSTANDING, ONE STEP AT A TIME.</div></section>
+ <section class="stats" aria-label="分析概览" id="stats"></section>
+ <section class="workspace" id="graph-workspace">
+  <div class="work-head"><div class="work-title"><span class="accent mono">⤷</span><span id="panel-title">入口 → 目标函数</span><span class="mono" id="path-count"></span></div><div class="work-tools"><button id="export-svg">↓ SVG</button><button id="show-unresolved">分析边界</button></div></div>
+  <div class="claims hidden" id="claims-panel"><div><label for="claim-text">AGENT 声明 · 手动粘贴，仅识别明确函数名</label><textarea id="claim-text" spellcheck="false" placeholder="例如：我重构了 parseConfig 的解析逻辑。"></textarea><div class="mode-caption">编辑后实时匹配；同名函数需要人工消歧。</div></div><div><label>静态计算 · 根据所选修改函数反向遍历</label><div id="impact-summary" class="impact-summary"></div><div class="mode-caption">未提及的上游 ≠ 声明错误。这是复核线索。</div></div></div>
+  <div class="split"><div class="visual"><div class="controls"><label class="control" id="entry-control">入口<select id="entry-select" aria-label="选择入口"></select></label><label class="control"><span id="target-label">目标</span><select id="target-select" aria-label="选择目标或修改函数"></select></label><label class="range" id="depth-control">旁支深度<input id="depth" type="range" min="0" max="3" value="0"><output id="depth-value">0</output></label></div><div class="canvas" id="canvas"><div class="canvas-label" id="canvas-label">SHORTEST STATIC PATH</div><svg id="graph" role="img" aria-label="可交互静态调用图"></svg><div class="graph-empty hidden" id="graph-empty"></div><div class="canvas-buttons"><button id="zoom-out" aria-label="缩小">−</button><button id="zoom-reset" aria-label="重置缩放">适应</button><button id="zoom-in" aria-label="放大">+</button></div></div><div class="legend"><span><i></i><span id="legend-main">已解析调用</span></span><span><i class="orange"></i>当前函数</span><span><i class="dashed"></i><span id="legend-side">展开旁支</span></span><span class="basis">AST → GRAPH → VIEW</span></div></div><aside class="inspector" id="inspector" aria-label="函数详情"></aside></div>
+ </section>
+ <section class="workspace hidden" id="memory-workspace"><div class="work-head"><div class="work-title"><span class="accent mono">▤</span>有界上下文<span class="mono">DRAFT → CONFIRM → EXPORT</span></div><span class="badge">本地草稿</span></div><div class="memory-layout"><div class="memory-panel"><div class="section-label">STABLE / 每次会话加载</div><h2>只留下稳定的共识。</h2><p>入口、核心路径和关键决策。确认后导出；不会自动写入仓库。</p><textarea id="stable-text" aria-label="稳定层 Markdown 草稿" spellcheck="false"></textarea><div class="memory-meter"><div id="memory-bar"></div></div><div class="memory-actions"><span id="memory-size"></span><button class="primary" id="export-stable">确认并导出 Markdown</button></div><div class="mode-caption">保守按 UTF-8 字节上限 1,500 约束，作为 token 预算的近似上界。</div></div><div class="memory-panel"><div class="section-label">ON DEMAND / 按需检索</div><h2>把审查结论留给需要时。</h2><p>仅导出你已复核的影响面结论，附函数签名、时间和快照标识。</p><div id="review-record" class="code"></div><div style="margin-top:15px;display:flex;gap:8px;align-items:center"><button id="export-review">复核并导出审查记录</button><span class="small subtle" id="review-export-status">尚未确认</span></div><div class="divider"></div><p>详细图保留在 <code>*.graph.json</code>，用 CLI 按需查询。函数摘要来自源码注释；缺失时明确留空。</p><div class="badge">不自动注入 · 不自动追加 · 不发送代码</div></div></div><div class="query-box"><span class="small muted">让 Agent 只取当前任务所需的上下文</span><code id="query-example"></code></div></section>
+ <div class="notice"><span class="symbol">⊙</span><div id="boundary-notice"></div></div>
+ <footer class="footer"><div><span class="accent">❯</span> <code id="command-preview"></code></div><span>CodeTrail v0.4 · deterministic structure, human judgment</span></footer>
+</main>
+</div>
+<!--__WORKBENCH_HTML__-->
+<dialog id="modal"><h2 id="modal-title"></h2><div id="modal-body"></div><div class="dialog-actions"><button id="modal-cancel">关闭</button><button class="primary hidden" id="modal-confirm">确认并下载</button></div></dialog>
+<div id="toast" class="toast hidden" role="status"></div>
+<script>/*__VIEWER_SCRIPT__*/</script>
+</body>
+</html>

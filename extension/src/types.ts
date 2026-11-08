@@ -1,0 +1,5 @@
+export interface NodeInfo {id:string;name:string;file:string;line:number;end_line:number;kind:string;role:string;role_source:string;source:string;signature?:string;parameters?:string;return_type?:string;language:string;symbol_key:string;content_hash:string}
+export interface Edge {from:string;to:string;file:string;line:number;resolution:string}
+export interface Graph {schema_version:number;project:string;snapshot:string;nodes:NodeInfo[];edges:Edge[];changed:string[];entries:string[];claim:string;viewer?:Record<string,any>;review?:{base_commit:string;head:string;changes:Array<{key:string;status:string;reason:string;before?:NodeInfo;after?:NodeInfo}>;before_graph:Graph;file_changes?:Array<{path:string;status:string;old_path?:string}>;edge_changes?:Array<{from:string;to:string;status:string}>};[key:string]:unknown}
+export interface ApiConfig {provider:'openai-compatible'|'anthropic';apiBaseUrl:string;model:string;modelsUrl:string}
+export interface PublicApiConfig extends ApiConfig {hasApiKey:boolean;keyScope:string}

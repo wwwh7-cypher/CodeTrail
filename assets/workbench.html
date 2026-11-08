@@ -1,0 +1,13 @@
+<section id="settings-workspace" class="workspace hidden" aria-label="API 设置">
+ <div class="work-head"><div class="work-title">API 连接设置</div><span id="settings-scope" class="badge">本地预览</span></div>
+ <form id="api-form" class="api-form">
+  <p class="muted">填写你的服务地址与模型。扩展中的 API Key 通过 VS Code SecretStorage 保存。</p>
+  <label>服务协议<select id="api-provider"><option value="openai-compatible">OpenAI 兼容接口</option><option value="anthropic">Anthropic Messages</option></select></label>
+  <label>API Base URL<input id="api-url" type="url" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1"></label>
+  <label>Model ID<input id="api-model" list="api-models" placeholder="填写服务支持的模型 ID"><datalist id="api-models"></datalist></label>
+  <label>模型列表接口 URL <span class="muted">（可选）</span><input id="api-models-url" type="url" placeholder="留空时使用 Base URL + /models"></label>
+  <label>API Key<input id="api-key" type="password" autocomplete="off" placeholder="输入后保存至 SecretStorage"></label>
+  <div class="api-actions"><button type="submit" class="primary" id="api-save">保存设置</button><button type="button" id="api-list">获取模型列表</button><button type="button" id="api-test">测试连接</button><button type="button" id="api-delete">删除 Key</button></div>
+  <p id="api-status" role="status" class="muted">离线 HTML 支持查看设置布局；保存 Key 和连接测试在 VS Code 扩展内执行。</p>
+ </form>
+</section>

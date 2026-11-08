@@ -1,0 +1,4 @@
+interface:
+  display_name: "CodeTrail"
+  short_description: "搜索函数、展开调用网络、审核 Agent 改动；Skill 直接使用当前会话模型"
+  default_prompt: "使用 $code-trail 扫描当前仓库，用模糊搜索定位目标函数，按静态证据展开调用网络，并用当前对话模型生成职责说明及交互 HTML。"
