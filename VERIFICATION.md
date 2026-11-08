@@ -1,8 +1,8 @@
 # CodeTrail 0.5.0 验证
 
-日期：2026-11-08。发布者：`wwwh7`。发布渠道：GitHub Releases（本轮已发布）；VS Code Marketplace 发布按用户决定暂缓，0.5.0 的 Marketplace 发布命令见 `docs/RELEASING.md`。
+日期：2026-11-08。发布者：`wwwh7`。发布渠道：GitHub Releases 与 VS Code Marketplace（扩展 ID `wwwh7.codetrail-app`，显示名 CodeTrail）。Marketplace 0.5.0 已发布提交成功；首次发布的 Marketplace 扫描/验证可能延迟页面可见与安装。
 
-本文件记录开发机上的实际执行结果。表中 `output/...` 证据是本机验证产物，已被 gitignore、不随仓库分发；预编译 VSIX、Skill 与源码包通过 GitHub Releases（以及后续 Marketplace）分发。0.5.0 结果来自加入 C/C++ 支持后的最终构建。
+本文件记录开发机上的实际执行结果。表中 `output/...` 证据是本机验证产物，已被 gitignore、不随仓库分发；预编译 VSIX、Skill 与源码包通过 GitHub Releases 与 VS Code Marketplace 分发。0.5.0 结果来自加入 C/C++ 支持后的最终构建。
 
 ## 0.5.0 最终验证
 
@@ -13,8 +13,8 @@
 | API / 复核状态测试 | 3 项通过 | output/extension-unit.log |
 | VS Code Extension Host | 10 组集成场景通过；本机 VS Code 1.145.2 | output/vscode-test/extension-host-evidence.json |
 | 浏览器回归 | 15 组通过；页面 JavaScript 错误 0；10k 符号输入 p95 46.8 ms（同一机器不同运行存在波动） | output/browser-test/evidence.json |
-| VSIX 安装 | 独立用户/扩展目录成功安装 wwwh7.code-trail@0.5.0；VSIX 内含 changelog/readme/LICENSE/icon/bin | output/vsix-smoke-050 |
-| Marketplace 安装 | 本轮按用户决定暂缓发布；发布后可用 `https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail` 安装 | <https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail> |
+| VSIX 安装 | 独立用户/扩展目录成功安装 wwwh7.codetrail-app@0.5.0；VSIX 内含 changelog/readme/LICENSE/icon/bin | output/vsix-smoke-050c |
+| Marketplace 安装 | `vsce publish` 成功（`wwwh7.codetrail-app (win32-x64) v0.5.0`）；首次发布的 Marketplace 扫描/验证通过后可从 <https://marketplace.visualstudio.com/items?itemName=wwwh7.codetrail-app> 安装 | Marketplace 发布输出、output/marketplace-install/ |
 | 打包核对 | `vsce package --target win32-x64` 生成 16 个文件 / 3.81 MB；内置 14.43 MB 原生二进制；按 .vscodeignore 排除 node_modules 与测试文件；图标优化为 51.6 KB（256×256） | output/code-trail-0.5.0-win32-x64.vsix |
 | Skill 元数据 | 沿用上轮的 quick_validate.py 通过结果；本轮 SKILL.md 仅更新语言说明与发布渠道文案 | 本地 skill-creator 校验 |
 | MCP | 实际子进程 stdio initialize、tools/list、search、neighbors 通过 | output/native-test/evidence.json |
@@ -34,7 +34,7 @@
 | API / 复核状态测试 | 3 项通过；真实本机 HTTP mock 分别测试 OpenAI-compatible 与 Anthropic | output/extension-unit.log |
 | VS Code Extension Host | 10 组集成场景通过；本机 VS Code 1.145.2（最终构建重跑） | output/vscode-test/extension-host-evidence.json |
 | 浏览器回归 | 15 组通过，页面 JavaScript 错误 0；另做诊断横幅/匿名回调折叠/模块兜底的针对性检查 | output/browser-test/evidence.json、output/eval/shots/ui-* |
-| VSIX 安装 | 独立用户/扩展目录成功安装 wwwh7.code-trail@0.4.0（最终构建重跑） | output/vsix-smoke、output/vsix-install.log |
+| VSIX 安装 | 独立用户/扩展目录成功安装 wwwh7.codetrail-app@0.4.0（最终构建重跑） | output/vsix-smoke、output/vsix-install.log |
 | 打包核对 | 内置二进制与宿主 JS 与本次源码构建一致，排除 node_modules 与测试文件 | output/package-evidence.json |
 | Skill 元数据 | quick_validate.py 通过 | 本地 skill-creator 校验 |
 | MCP | 实际子进程 stdio initialize、tools/list、search、neighbors 通过 | output/native-test/evidence.json |
@@ -105,7 +105,7 @@ Skill 与 BYOK 都使用 snapshot/id/content_hash/title/summary 契约，并由 
 2. 实际 VS Code JS/TS Call Hierarchy 已通过。Go、Python、C、C++ 的语言服务补强使用相同 provider 接口，但本机没有单独验收 gopls/Python/clangd 调用层级；C/C++ 本身未集成 clang 或类型检查器，接口分派、成员类型推断、对象/指针/函数指针调用与跨包语义仍可能缺边。
 3. 动画用 requestAnimationFrame 与非线性 ease-out 实现，验证了中断、稳定坐标与减少动态效果。没有给出跨设备 60 fps 保证。
 4. 真人任务对照、约 30% 时间改善、七日留存、BYOK 完成率与付费意愿尚未测量。使用 USER_TEST_PROTOCOL.md 收集真实参与者数据。
-5. Marketplace 发布：0.5.0 计划发布到 VS Code Marketplace（publisher `wwwh7`）；发布状态以 Marketplace 页面为准。本机验证不使用 Marketplace 发布凭据，仓库内不保存 PAT；GitHub Releases 资产由维护者手动上传。
+5. Marketplace 发布：0.5.0 已通过 `vsce publish --packagePath` 提交到 VS Code Marketplace（publisher `wwwh7`，扩展 ID `wwwh7.codetrail-app`，win32-x64）。首次发布需要 Microsoft 的扫描/验证，页面可见性与安装可能在数分钟到数小时内延迟；发布状态以 Marketplace 页面为准。PAT 仅在本机临时使用，不进入仓库。
 
 ## 复现
 
@@ -129,7 +129,7 @@ node scripts/render-doc-screenshots.cjs
 ## 发布资产（`v0.5.0`）
 
 - GitHub Release：<https://github.com/wwwh7-cypher/CodeTrail/releases/tag/v0.5.0>
-- VS Code Marketplace：<https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail>（本轮暂缓发布，发布前页面不可用）
+- VS Code Marketplace：<https://marketplace.visualstudio.com/items?itemName=wwwh7.codetrail-app>（扩展 ID `wwwh7.codetrail-app`，0.5.0 已提交发布；首次扫描/验证通过后页面与安装生效）
 - `code-trail-0.5.0-win32-x64.vsix`：Windows x64 VS Code 插件（含原生二进制与界面资源）
 - `code-trail-0.5.0-skill.zip`：可直接放入 Agent `skills/code-trail` 的 Skill（含原生二进制）
 - `code-trail-0.5.0-source.zip`：源码与构建脚本

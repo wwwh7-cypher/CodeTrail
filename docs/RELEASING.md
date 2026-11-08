@@ -2,7 +2,7 @@
 
 CodeTrail 通过两个渠道分发：
 
-- **VS Code Marketplace**（publisher `wwwh7`，验证页面 <https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail>）：面向 VS Code 用户的 VSIX 安装渠道。
+- **VS Code Marketplace**（publisher `wwwh7`，扩展 ID `wwwh7.codetrail-app`，验证页面 <https://marketplace.visualstudio.com/items?itemName=wwwh7.codetrail-app>）：面向 VS Code 用户的 VSIX 安装渠道。Marketplace 要求扩展 `name` 全局唯一；`code-trail` / `codetrail` 已被其他发布者占用，因此本仓库使用 `codetrail-app` 作为 `name`，显示名仍为 CodeTrail。
 - **GitHub Releases**（<https://github.com/wwwh7-cypher/CodeTrail/releases>）：VSIX、Skill zip 与源码 zip，也是 Skill 用户的下载来源。
 
 两个渠道使用同一个版本号；版本号来自 `Cargo.toml` 的 `[package] version`（`extension/package.json` 需同步，发布前检查两者一致）。
@@ -96,7 +96,7 @@ npx vsce publish --packagePath output/code-trail-<version>-win32-x64.vsix
 - 如果 `vsce` 不在 PATH，可用本地 devDependency：`npx @vscode/vsce publish --packagePath output/code-trail-<version>-win32-x64.vsix`。
 - 本仓库另有确认门控辅助脚本 `npm --prefix extension run publish:marketplace -- --confirmed`（在 `extension/` 内重新打包并发布，需要 `--confirmed` 且同样读取 `VSCE_PAT`）。
 - VSIX 是**平台限定**包（本仓库为 `win32-x64`）；Marketplace 会把它标记为 Windows x64。其他平台用户需从源码构建，不能使用该包。
-- 发布后核对页面：<https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail>。首次发布后状态可能有延迟。
+- 发布后核对页面：<https://marketplace.visualstudio.com/items?itemName=wwwh7.codetrail-app>。首次发布后状态可能有延迟。
 
 ### 注意事项
 

@@ -4,7 +4,7 @@ CodeTrail 在 VS Code 内展示可交互的函数调用网络，帮助开发者�
 
 ## 安装
 
-1. 在 VS Code 扩展视图搜索 **CodeTrail**（publisher `wwwh7`），或打开 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail)。Marketplace 页面在发布前可能暂时不可用。
+1. 在 VS Code 扩展视图搜索 **CodeTrail**（publisher `wwwh7`，扩展 ID `wwwh7.codetrail-app`），或打开 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wwwh7.codetrail-app)。Marketplace 要求扩展 `name` 全局唯一，因此 ID 为 `codetrail-app`，显示名为 CodeTrail。
 2. 也可从 [GitHub Releases](https://github.com/wwwh7-cypher/CodeTrail/releases) 下载 `code-trail-<version>-win32-x64.vsix`，在扩展视图右上角选择 **从 VSIX 安装**。
 3. 预编译包目标为 **Windows x64**；其他平台需从源码构建（见仓库根目录 README）。安装后重新加载窗口。
 
@@ -50,6 +50,6 @@ CodeTrail 在 VS Code 内展示可交互的函数调用网络，帮助开发者�
 
 ## 支持与反馈
 
-- Marketplace：<https://marketplace.visualstudio.com/items?itemName=wwwh7.code-trail>（publisher `wwwh7`；Marketplace 条目发布前请使用 Releases 的 VSIX）。
+- Marketplace：<https://marketplace.visualstudio.com/items?itemName=wwwh7.codetrail-app>（扩展 ID `wwwh7.codetrail-app`，publisher `wwwh7`）。
 - GitHub：<https://github.com/wwwh7-cypher/CodeTrail>；问题反馈：<https://github.com/wwwh7-cypher/CodeTrail/issues>；预编译包：<https://github.com/wwwh7-cypher/CodeTrail/releases>。
 - 版本变更见仓库内 `CHANGELOG.md`。本项目未发布到其他扩展市场。

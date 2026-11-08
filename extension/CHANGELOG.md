@@ -9,7 +9,7 @@
 - **C / C++ 语法索引**：支持 C（`.c`、`.h`）与 C++（`.cpp`、`.cc`、`.cxx`、`.c++`、`.hpp`、`.hh`、`.hxx`、`.h++`）；`.h` 默认按 C++ 解析，失败时回退到 C。只把函数定义建为节点，原型不是节点。
 - **C 静态关系解析**：同文件词法调用、本地引号 `#include` 文件，以及被包含头文件对应的同目录实现文件；这些静态候选边标记为 `c-include-static`。
 - **C++ 静态关系解析**：在 C 的基础上，额外解析 `this->method()`、同一类内的非限定兄弟方法，以及唯一的 `Class::method` 候选。
-- VS Code Marketplace 发布准备（publisher `wwwh7`），与 GitHub Releases 并行分发；本轮 Marketplace 发布按计划暂缓，当前请使用 Releases 中的 VSIX。预编译包仍为 Windows x64 目标。
+- 发布到 VS Code Marketplace（publisher `wwwh7`，扩展 ID `wwwh7.codetrail-app`，显示名 CodeTrail），与 GitHub Releases 并行分发；Marketplace 要求 `name` 全局唯一，故 ID 使用 `codetrail-app`。预编译包仍为 Windows x64 目标。
 
 ### 修复
 
