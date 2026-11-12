@@ -23,7 +23,7 @@ struct Cli {
 enum Command {
     #[command(
         about = "扫描仓库，生成代码图与静态导览",
-        long_about = "扫描仓库中的 TypeScript/JavaScript/Svelte/Python/Go/C/C++ 文件，构建函数调用图，并输出可离线打开的 HTML 导览与 JSON 图。"
+        long_about = "扫描仓库中的 TypeScript/JavaScript/Svelte/Python/Go/C/C++ 文件，构建函数调用图，并输出可离线打开的 HTML 导览与 JSON 图。可用 --module-depth 与 --module-group 控制模块聚合并写入代码图。"
     )]
     Scan {
         repo: PathBuf,
@@ -39,10 +39,14 @@ enum Command {
         claims: Option<PathBuf>,
         #[arg(long)]
         cache: Option<PathBuf>,
+        #[arg(long, value_name = "N", default_value_t = 0, help = "模块分段深度：0 表示自动（src/backend 取 3 段，其余取 2 段）")]
+        module_depth: usize,
+        #[arg(long = "module-group", value_name = "NAME=PREFIX", help = "自定义模块分组，可重复；按声明顺序匹配相对路径前缀，如 core=src/core/")]
+        module_group: Vec<String>,
     },
     #[command(
         about = "按 Git 变更生成审查导览",
-        long_about = "比较 Git 基线到目标提交的变更，标注受影响的函数、调用边与审查疑点，输出审查用 HTML、JSON 与可选报告。"
+        long_about = "比较 Git 基线到目标提交的变更，标注受影响的函数、调用边与审查疑点，输出审查用 HTML、JSON 与可选报告。可用 --module-depth 与 --module-group 控制模块聚合，配置同时写入审查图与基线内嵌图。"
     )]
     Review {
         repo: PathBuf,
@@ -60,6 +64,10 @@ enum Command {
         json: Option<PathBuf>,
         #[arg(long)]
         report: Option<PathBuf>,
+        #[arg(long, value_name = "N", default_value_t = 0, help = "模块分段深度：0 表示自动（src/backend 取 3 段，其余取 2 段）")]
+        module_depth: usize,
+        #[arg(long = "module-group", value_name = "NAME=PREFIX", help = "自定义模块分组，可重复；按声明顺序匹配相对路径前缀，如 core=src/core/")]
+        module_group: Vec<String>,
     },
     #[command(
         about = "查询已生成的代码图",
@@ -190,9 +198,12 @@ enum Query {
     },
     #[command(
         about = "列出模块级节点",
-        long_about = "列出各文件的模块顶层节点及其统计信息。"
+        long_about = "聚合模块级依赖与调用证据：输出模块摘要、跨模块边与循环依赖（强连通分量）。默认不展开文件、函数与证据明细，加 --full 展开。instability = 出向调用点 ÷ (入向 + 出向调用点)，无跨模块调用时为 null。旧图缺少 module 字段时按同一算法回退计算。"
     )]
-    Modules,
+    Modules {
+        #[arg(long, help = "展开每个模块的 files/functions 与每条跨模块边的 evidence")]
+        full: bool,
+    },
 }
 #[derive(Subcommand)]
 enum Memory {
@@ -288,7 +299,10 @@ fn run() -> Result<()> {
             changed,
             claims,
             cache,
+            module_depth,
+            module_group,
         } => {
+            let groups = code_trail::index::parse_module_groups(&module_group)?;
             let start = Instant::now();
             let mut graph = analysis::scan_cached(&root(&repo)?, cache.as_deref())?;
             for name in entry {
@@ -311,6 +325,11 @@ fn run() -> Result<()> {
                 .map(fs::read_to_string)
                 .transpose()?
                 .unwrap_or_default();
+            code_trail::index::apply_module_config(
+                &mut graph,
+                u32::try_from(module_depth).unwrap_or(u32::MAX),
+                groups,
+            );
             graph.generated_unix = memory::now();
             graph.analysis_ms = start.elapsed().as_millis() as u64;
             graph_out(&mut graph, &out, json)
@@ -324,7 +343,10 @@ fn run() -> Result<()> {
             out,
             json,
             report,
+            module_depth,
+            module_group,
         } => {
+            let groups = code_trail::index::parse_module_groups(&module_group)?;
             let start = Instant::now();
             let mut graph = review::git_review(
                 &root(&repo)?,
@@ -336,6 +358,11 @@ fn run() -> Result<()> {
                     .unwrap_or_default(),
                 &entry,
             )?;
+            code_trail::index::apply_module_config(
+                &mut graph,
+                u32::try_from(module_depth).unwrap_or(u32::MAX),
+                groups,
+            );
             graph.generated_unix = memory::now();
             graph.analysis_ms = start.elapsed().as_millis() as u64;
             if let Some(path) = report {
@@ -383,7 +410,9 @@ fn run() -> Result<()> {
                 } => print(code_trail::index::neighbors(
                     &graph, &function, offset, limit,
                 )?),
-                Query::Modules => print(code_trail::index::modules(&graph)),
+                Query::Modules { full } => {
+                    print(code_trail::index::modules(&graph, full))
+                }
             }
         }
         Command::Memory {

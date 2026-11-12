@@ -117,7 +117,7 @@ impl Server {
                         args["limit"].as_u64().unwrap_or(100) as usize,
                     )
                 }
-                "code_trail_modules" => Ok(crate::index::modules(&graph)),
+                "code_trail_modules" => Ok(crate::index::modules(&graph, false)),
                 "code_trail_path" => query_graph(&graph, "path", &args),
                 "code_trail_impact" => query_graph(&graph, "impact", &args),
                 "code_trail_memory" => {

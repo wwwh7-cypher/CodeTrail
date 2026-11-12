@@ -610,6 +610,7 @@ fn visit(
             id: id.clone(),
             name,
             file: unit.file.clone(),
+            module: String::new(),
             line,
             end_line: node.end_position().row + 1,
             kind: if class.is_some() || node.kind() == "method_definition" {
@@ -1008,6 +1009,7 @@ fn parse(file: &str, source: &str) -> Result<Unit> {
         id: id.clone(),
         name: "<module>".into(),
         file: file.into(),
+        module: String::new(),
         line: 1,
         end_line: source.lines().count(),
         kind: "module".into(),
@@ -1737,6 +1739,8 @@ fn assemble(
     graph
         .edges
         .sort_by(|a, b| (&a.from, &a.to, a.line).cmp(&(&b.from, &b.to, b.line)));
+    // 构图完成后先按自动配置填充模块键；CLI 可再用 --module-depth/--module-group 覆盖。
+    crate::index::apply_module_config(&mut graph, 0, Vec::new());
     Ok(graph)
 }
 

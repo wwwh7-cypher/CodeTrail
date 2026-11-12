@@ -7,6 +7,9 @@ pub struct Function {
     pub id: String,
     pub name: String,
     pub file: String,
+    /// 由模块配置算出的模块键；旧图缺省为空，查询时按同一算法回退计算。
+    #[serde(default)]
+    pub module: String,
     pub line: usize,
     pub end_line: usize,
     pub kind: String,
@@ -34,7 +37,7 @@ pub struct Function {
     pub class: Option<String>,
     #[serde(skip)]
     pub bindings: Vec<String>,
-    #[serde(skip)]
+    #[serde(default)]
     pub exported: bool,
     #[serde(skip)]
     pub default_export: bool,
@@ -58,6 +61,13 @@ pub struct Unresolved {
     pub reason: String,
 }
 
+/// 用户声明的模块分组：文件路径以 prefix 开头时归入 name。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModuleGroup {
+    pub name: String,
+    pub prefix: String,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Graph {
     pub schema_version: u32,
@@ -66,6 +76,11 @@ pub struct Graph {
     pub snapshot: String,
     pub generated_unix: u64,
     pub analysis_ms: u64,
+    /// 模块分段深度；0 表示按路径自动推断。
+    #[serde(default)]
+    pub module_depth: u32,
+    #[serde(default)]
+    pub module_groups: Vec<ModuleGroup>,
     #[serde(default)]
     pub cache_hits: usize,
     #[serde(default)]
