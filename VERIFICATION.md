@@ -1,8 +1,36 @@
 # CodeTrail 验证记录
 
-更新日期：2026-11-09。发布者：`wwwh7`。扩展 ID：`wwwh7.codetrail-app`。Marketplace 0.5.1 已提交发布成功；公开页面同步可能延迟。GitHub Releases 既有资产仍为 0.5.0，本轮仅更新 GitHub 源码。
+更新日期：2026-11-12。发布者：`wwwh7`。扩展 ID：`wwwh7.codetrail-app`。Marketplace 0.5.1 已提交发布成功；公开页面同步可能延迟。GitHub Releases 既有资产仍为 0.5.0；2026-11-12 的模块模型与查看器改进**未改版本号、未执行发布**。
 
-本文件记录开发机上的实际执行结果。表中 `output/...` 证据是本机验证产物，已被 gitignore、不随仓库分发；预编译 VSIX、Skill 与源码包通过 GitHub Releases 与 VS Code Marketplace 分发。下文分别保留 0.5.1 交互改进与 0.5.0 发布构建的验证结果。
+本文件记录开发机上的实际执行结果。表中 `output/...` 证据是本机验证产物，已被 gitignore、不随仓库分发；预编译 VSIX、Skill 与源码包通过 GitHub Releases 与 VS Code Marketplace 分发。下文分别保留 2026-11-12 未发布改进、0.5.1 交互改进与 0.5.0 发布构建的验证结果。
+
+## 2026-11-12 模块模型与查看器改进验证（未发布）
+
+以下均为本机 Windows x64 的一次运行结果；扩展版本仍为 0.5.1，本轮没有打包或发布新版本。
+
+| 检查 | 结果 | 可核对证据 |
+| --- | --- | --- |
+| 最终二进制 | `bin/code-trail.exe`，2026-11-12 14:32:03，15,282,176 字节，SHA-256 `085AE3992C4BE8412B8A1455C8562ECA5A587976F1A8F8F70736FCCAD0F2DEBC`，版本 `code-trail 0.5.1`；内嵌 assets 与仓库 `assets/` 逐段比较 0 差异（128,959 B） | `bin/code-trail.exe`（构建产物，不随仓库分发）；比较为本机脚本执行 |
+| Rust 单元与集成测试 | `cargo +stable-x86_64-pc-windows-gnu test --locked`：lib 40 + `tests/cli.rs` 10 + `tests/workflows.rs` 16 = 66 passed，0 failed | 本机 cargo test 输出；命令见“复现” |
+| 浏览器回归 | `node scripts/verify-explorer.cjs --final-architecture output/e2e-final/architecture.html --final-review output/e2e-final/review.html`：26/26 checks passed，consoleErrors=[]，整轮 32.3 s；10,000 合成符号输入到下一帧 p95 = 49.6 ms。独立复跑 exit 0，同口径 p95 = 38.5 ms。默认模式（不带 `--final-*`）同样 exit 0、consoleErrors=[] | 本机运行输出；最终产物 `output/e2e-final/architecture.html`（960 函数 / 831 边 / 34 文件 / 3,992 未解析）与 `review.html`（722 个函数变更 / 1,049 处 Git 变更），render 版字节一致 |
+| 原生 CLI 与 MCP | `node scripts/verify-native.mjs` exit 0：真实 MCP stdio `initialize`、`tools/list`、search、neighbors 通过；Git 新增/修改/删除/非函数文件/删除边通过；10,000 合成符号 CLI 读图 + 搜索 p95 约 65 ms（单次本机测量） | 本机运行输出；命令见“复现” |
+| 截图 | 由上述最终二进制运行 `node scripts/render-doc-screenshots.cjs`：`architecture.png` 1600×1100 / 179.9 KB、`modules.png` 1600×1100 / 146.0 KB、`review.png` 1600×1100 / 158.3 KB；无 page error；截图脚本本身未修改 | `docs/screenshots/*.png` |
+| DSH 插件联调 | `@local/codetrail-dsh` 0.2.0 重新安装并 applied；内置同一最终二进制；4 个工具可用（scan：960 函数 / 831 边 / 34 文件 / 3,992 未解析；`query modules`：7 个模块、cycles=[]；review 此前为 763 函数 / 680 变更）；面板 `/codetrail/view/<id>` 返回 200；面板 HTML 命中 `unresolved-badge`、`edge-multi-label`、`module-dep-table`、`metric-chip`、`data-relation-table`、`direction-switch`、`instability:null`、`entryCategory` 等新标记 | 本机联调输出；面板视觉未人工验收 |
+
+### 本轮改动摘要
+
+- **扫描写入的事实**：`Function.module` 与 `Function.exported`、`Graph.module_depth` 与 `Graph.module_groups`；`scan`/`review` 的 `--module-depth <N>` 与可重复 `--module-group NAME=PREFIX`；`query modules [--full]` 的摘要（模块指标、跨模块边、循环）与 `review.changes`。旧图缺字段时按同一算法回退。
+- **查看器（A–H）**：调用点 `×N` 聚合与静态/候选虚线；未解析 `⚡N` 角标、原因弹窗与检查器清单；方向开关与上游/下游深度；每侧 Top-N + “其余 K 个”聚合卡；紧凑卡/LOD 与多列布局；图派生范围筛选、隐藏匿名回调/测试文件；检查器关系清单三表（可排序、复制 JSON、查看证据）；模块指标、全量依赖表、邻居间依赖与循环高亮、review 模块级影响；入口分类与入口跳数。
+- **展示派生，不是扫描事实**：入口分类与跳数、Top-N 聚合/紧凑卡/LOD、关系清单排序、模块卡上的 instability 与循环高亮、review 模块级计数，都是对静态图的展示派生，不新增或删除调用关系。静态边界保持原样：未解析调用≠运行时不可达；模块边只聚合已解析的跨模块函数调用，不冒充 HTTP 或运行时关系。
+
+### 未覆盖边界
+
+1. **无真人视觉验收**：截图与 DOM 断言不等于人眼验收；面板与截图的可读性、信息密度仍需要真人确认。
+2. **无真实 VS Code Webview 宿主运行**：用既有 `acquireVsCodeApi` bridge 断言覆盖消息链路，本轮没有启动真实 VS Code 宿主逐项验收新交互。
+3. **未在真实大型仓库/多语言混合仓上做压力与可用性验证**：本轮最大样本为 `output/e2e-final` 的 960 函数 / 831 边 / 34 文件；10,000 符号为合成输入。不能外推到超大仓库的布局、性能或可用性。
+4. **无付费真实 API 联调**：本机没有 BYOK 调用；模型相关能力沿用既有 mock/契约验证结果。
+5. **截图覆盖有限**：三张图只覆盖 `examples/config-service`（headless Edge 157，由 `scripts/lib/browser-env.cjs` 解析）。该示例没有多调用点聚合边与模块循环，因此截图中不出现 `×N` 与循环高亮；这些能力由 verify-explorer 的 A–H 断言覆盖，而不是由截图证明。
+6. 本轮未改版本号，未执行 VSIX 打包、Marketplace 发布或 GitHub Release；扩展分发状态仍以上一轮 0.5.1 为准。
 
 ## 0.5.1 交互与模块图发布（2026-11-09）
 
@@ -130,11 +158,12 @@ node scripts/render-research-preview.mjs bin/code-trail.exe
 node scripts/render-backend-preview.mjs
 node scripts/verify-native.mjs
 node scripts/verify-explorer.cjs
+node scripts/verify-explorer.cjs --final-architecture output/e2e-final/architecture.html --final-review output/e2e-final/review.html
 python scripts/package-skill.py
 node scripts/render-doc-screenshots.cjs
 ```
 
-实际项目测试目录、VS Code 可执行文件、Playwright 模块与 Chromium 路径可用 `CODETRAIL_REAL`、`CODETRAIL_VSCODE`、`PLAYWRIGHT_MODULE`、`CHROMIUM_PATH` 覆盖（见 README 开发章节与 `scripts/lib/browser-env.cjs`）。`bin/code-trail.exe` 与 `extension/bin/code-trail.exe` 都是构建产物：先运行 `pwsh -File scripts/build.ps1`；全新克隆在 `npm --prefix extension run test:vscode` 前还需执行 `npm --prefix extension run package`（或手动复制二进制到 `extension/bin/`），因为该目录不再提交到仓库。若 shell 设置了 `ELECTRON_RUN_AS_NODE=1`，运行 `test:vscode` 前需要先移除。浏览器回归的 review.html 由 verify-native.mjs 提前生成。`scripts/package-skill.py` 从 `Cargo.toml` 读取版本号生成 `code-trail-<version>-skill.zip` / `-source.zip`。快照图和 HTML 含源码片段，仅供用户请求的本地评审。
+实际项目测试目录、VS Code 可执行文件、Playwright 模块与 Chromium 路径可用 `CODETRAIL_REAL`、`CODETRAIL_VSCODE`、`PLAYWRIGHT_MODULE`、`CHROMIUM_PATH` 覆盖（见 README 开发章节与 `scripts/lib/browser-env.cjs`）。`verify-explorer.cjs` 的 `--final-architecture` / `--final-review` 需要先由本机流程生成对应 HTML（本轮为 gitignore 的 `output/e2e-final/`）；不带这些参数时使用内置 fixture 与 `output/native-test/` 产物。`bin/code-trail.exe` 与 `extension/bin/code-trail.exe` 都是构建产物：先运行 `pwsh -File scripts/build.ps1`；全新克隆在 `npm --prefix extension run test:vscode` 前还需执行 `npm --prefix extension run package`（或手动复制二进制到 `extension/bin/`），因为该目录不再提交到仓库。若 shell 设置了 `ELECTRON_RUN_AS_NODE=1`，运行 `test:vscode` 前需要先移除。浏览器回归的 review.html 由 verify-native.mjs 提前生成。`scripts/package-skill.py` 从 `Cargo.toml` 读取版本号生成 `code-trail-<version>-skill.zip` / `-source.zip`。快照图和 HTML 含源码片段，仅供用户请求的本地评审。
 
 ## 发布资产（`v0.5.0`）
 
