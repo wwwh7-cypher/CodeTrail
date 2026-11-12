@@ -8,6 +8,8 @@ state.view = viewOptions.default_view || 'network';
 state.depth = state.view === 'network' ? 1 : 0;
 state.limit = 9;
 state.scope = viewOptions.scope || '';
+state.hideAnonymous = false;
+state.hideTests = false;
 if (byId.has(viewOptions.entry)) state.entry = viewOptions.entry;
 if (byId.has(viewOptions.target)) state.target = state.selected = viewOptions.target;
 let memoryEditing = false, memoryDirty = false, tokenRevision = 0, tokenTimer;
@@ -17,7 +19,8 @@ function postHost(message) {
   if (hostApi) hostApi.postMessage(message);
   else toast('此操作在 VS Code 扩展中执行；当前为离线 HTML 预览。');
 }
-function inScope(n) { return !!n && (!state.scope || n.file.startsWith(state.scope)) && !(G.viewer?.exclude_test_files && /(?:_test\.go|\.(?:test|spec)\.[^.]+)$/.test(n.file)); }
+function isTestFile(file) { return /(^|\/)(tests?|__tests__|__fixtures__|testdata)\//.test(file) || /(?:_test\.go|_test\.py|\.(?:test|spec)\.[^.]+)$/.test(file) || /(^|\/)test_[^/]+$/.test(file); }
+function inScope(n) { return !!n && (!state.scope || n.file.startsWith(state.scope)) && !(G.viewer?.exclude_test_files && isTestFile(n.file)) && !(state.hideAnonymous && n.name.startsWith('<')) && !(state.hideTests && isTestFile(n.file)); }
 function selectedTargets() { return state.target === '__all__' ? G.changed.filter(id => byId.has(id)) : byId.has(state.target) ? [state.target] : []; }
 function currentImpact() { const ids = new Set(); for (const id of selectedTargets()) for (const n of reach(id, rev)) ids.add(n); return ids; }
 function sourceNote(n) { const note = sourceNotes[n.id]; return note && (!note.content_hash || note.content_hash === n.content_hash) ? note : null; }
