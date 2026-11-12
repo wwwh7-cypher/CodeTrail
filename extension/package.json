@@ -2,7 +2,7 @@
   "name": "codetrail-app",
   "displayName": "CodeTrail — 架构导览与 AI 修改审查",
   "description": "Rust 静态代码图：入口路径、Git 修改影响、BYOK 职责叙述与有界架构记忆。",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "publisher": "wwwh7",
   "engines": {
     "vscode": "^1.100.0"

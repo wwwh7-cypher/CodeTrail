@@ -1,20 +1,21 @@
 # CodeTrail 验证记录
 
-更新日期：2026-11-12。发布者：`wwwh7`。扩展 ID：`wwwh7.codetrail-app`。Marketplace 0.5.1 已提交发布成功；公开页面同步可能延迟。GitHub Releases 既有资产仍为 0.5.0；2026-11-12 的模块模型与查看器改进**未改版本号、未执行发布**。
+更新日期：2026-11-12。发布者：`wwwh7`。扩展 ID：`wwwh7.codetrail-app`。Marketplace 0.5.1 已提交发布成功；公开页面同步可能延迟。GitHub Releases 既有资产仍为 0.5.0；2026-11-12 的模块模型与查看器改进已随 **0.6.0** 打包为 Windows x64 VSIX 并在本机 VS Code 安装验证，**尚未发布到 Marketplace 或 GitHub Releases**。
 
-本文件记录开发机上的实际执行结果。表中 `output/...` 证据是本机验证产物，已被 gitignore、不随仓库分发；预编译 VSIX、Skill 与源码包通过 GitHub Releases 与 VS Code Marketplace 分发。下文分别保留 2026-11-12 未发布改进、0.5.1 交互改进与 0.5.0 发布构建的验证结果。
+本文件记录开发机上的实际执行结果。表中 `output/...` 证据是本机验证产物，已被 gitignore、不随仓库分发；预编译 VSIX、Skill 与源码包通过 GitHub Releases 与 VS Code Marketplace 分发。下文分别保留 2026-11-12 的 0.6.0 构建、0.5.1 交互改进与 0.5.0 发布构建的验证结果。
 
-## 2026-11-12 模块模型与查看器改进验证（未发布）
+## 2026-11-12 模块模型与查看器改进（0.6.0 本地 VSIX，未发布 Marketplace）
 
-以下均为本机 Windows x64 的一次运行结果；扩展版本仍为 0.5.1，本轮没有打包或发布新版本。
+以下均为本机 Windows x64 的一次运行结果；扩展版本已升至 0.6.0，已打包 Windows x64 VSIX 并在本机 VS Code 安装验证，尚未发布到 Marketplace 或 GitHub Releases。
 
 | 检查 | 结果 | 可核对证据 |
 | --- | --- | --- |
-| 最终二进制 | `bin/code-trail.exe`，2026-11-12 14:32:03，15,282,176 字节，SHA-256 `085AE3992C4BE8412B8A1455C8562ECA5A587976F1A8F8F70736FCCAD0F2DEBC`，版本 `code-trail 0.5.1`；内嵌 assets 与仓库 `assets/` 逐段比较 0 差异（128,959 B） | `bin/code-trail.exe`（构建产物，不随仓库分发）；比较为本机脚本执行 |
+| 最终二进制 | `bin/code-trail.exe`，2026-11-12 17:11:16，15,282,176 字节，SHA-256 `ECDE9B4C5393FA99DFFD30A13800CE7D0CF12C707901BD559A75F31F7F1779BB`，版本 `code-trail 0.6.0`；内嵌 assets 与仓库 `assets/` 逐段比较 0 差异（128,959 B） | `bin/code-trail.exe`（构建产物，不随仓库分发）；比较为本机脚本执行 |
 | Rust 单元与集成测试 | `cargo +stable-x86_64-pc-windows-gnu test --locked`：lib 40 + `tests/cli.rs` 10 + `tests/workflows.rs` 16 = 66 passed，0 failed | 本机 cargo test 输出；命令见“复现” |
 | 浏览器回归 | `node scripts/verify-explorer.cjs --final-architecture output/e2e-final/architecture.html --final-review output/e2e-final/review.html`：26/26 checks passed，consoleErrors=[]，整轮 32.3 s；10,000 合成符号输入到下一帧 p95 = 49.6 ms。独立复跑 exit 0，同口径 p95 = 38.5 ms。默认模式（不带 `--final-*`）同样 exit 0、consoleErrors=[] | 本机运行输出；最终产物 `output/e2e-final/architecture.html`（960 函数 / 831 边 / 34 文件 / 3,992 未解析）与 `review.html`（722 个函数变更 / 1,049 处 Git 变更），render 版字节一致 |
 | 原生 CLI 与 MCP | `node scripts/verify-native.mjs` exit 0：真实 MCP stdio `initialize`、`tools/list`、search、neighbors 通过；Git 新增/修改/删除/非函数文件/删除边通过；10,000 合成符号 CLI 读图 + 搜索 p95 约 65 ms（单次本机测量） | 本机运行输出；命令见“复现” |
 | 截图 | 由上述最终二进制运行 `node scripts/render-doc-screenshots.cjs`：`architecture.png` 1600×1100 / 179.9 KB、`modules.png` 1600×1100 / 146.0 KB、`review.png` 1600×1100 / 158.3 KB；无 page error；截图脚本本身未修改 | `docs/screenshots/*.png` |
+| VSIX 打包与安装 | `npm --prefix extension run package` 生成 `output/code-trail-0.6.0-win32-x64.vsix`（3.88 MB / 16 个文件）；`extension/package.json` 版本 0.6.0，`extension/media/viewer.html` 命中 `unresolved-badge`、`edge-multi-label`、`module-dep-table`、`metric-chip`、`data-relation-table`、`direction-switch`，内置二进制 SHA-256 与 `bin/code-trail.exe` 一致；`npm --prefix extension run test:unit` 3/3 通过；`code --install-extension` 安装成功，`code --list-extensions --show-versions` 显示 `wwwh7.codetrail-app@0.6.0` | `output/code-trail-0.6.0-win32-x64.vsix`（构建产物，不随仓库分发）；安装输出 |
 | DSH 插件联调 | `@local/codetrail-dsh` 0.2.0 重新安装并 applied；内置同一最终二进制；4 个工具可用（scan：960 函数 / 831 边 / 34 文件 / 3,992 未解析；`query modules`：7 个模块、cycles=[]；review 此前为 763 函数 / 680 变更）；面板 `/codetrail/view/<id>` 返回 200；面板 HTML 命中 `unresolved-badge`、`edge-multi-label`、`module-dep-table`、`metric-chip`、`data-relation-table`、`direction-switch`、`instability:null`、`entryCategory` 等新标记 | 本机联调输出；面板视觉未人工验收 |
 
 ### 本轮改动摘要
@@ -30,7 +31,7 @@
 3. **未在真实大型仓库/多语言混合仓上做压力与可用性验证**：本轮最大样本为 `output/e2e-final` 的 960 函数 / 831 边 / 34 文件；10,000 符号为合成输入。不能外推到超大仓库的布局、性能或可用性。
 4. **无付费真实 API 联调**：本机没有 BYOK 调用；模型相关能力沿用既有 mock/契约验证结果。
 5. **截图覆盖有限**：三张图只覆盖 `examples/config-service`（headless Edge 157，由 `scripts/lib/browser-env.cjs` 解析）。该示例没有多调用点聚合边与模块循环，因此截图中不出现 `×N` 与循环高亮；这些能力由 verify-explorer 的 A–H 断言覆盖，而不是由截图证明。
-6. 本轮未改版本号，未执行 VSIX 打包、Marketplace 发布或 GitHub Release；扩展分发状态仍以上一轮 0.5.1 为准。
+6. 本轮已 bump 到 0.6.0 并打包 Windows x64 VSIX、在本机 VS Code 安装验证；**未发布到 VS Code Marketplace、未创建 GitHub Release、未上传 GitHub Release 资产**，公开分发状态仍以上一轮 0.5.1 为准。
 
 ## 0.5.1 交互与模块图发布（2026-11-09）
 
