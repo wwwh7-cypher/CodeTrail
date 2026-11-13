@@ -2,6 +2,13 @@
 
 本文件记录 CodeTrail 的版本变更；VS Code Marketplace 与 GitHub Releases 使用同一份版本号。
 
+## 0.6.1（2026-11-13）
+
+- 查看器：单击函数展开一级邻居，再次单击同一函数收起；收起会连带收回该次展开加入的远处节点并恢复展开前的焦点/可见集合/聚合卡，固定节点保留。
+- 查看器：新展开的后置函数改用更远的连线与无遮挡布局，按卡片实际矩形避让，不再覆盖已有函数；可展开/可收起的节点增加角标与可访问提示。
+- AI 解析记忆：VS Code 中每次“解释此函数”成功后，把 BYOK 模型生成的标题/职责自动追加到工作区 `.codetrail/ai-memory.md`（同一函数同一内容哈希原位更新）；新增 `codeTrail.aiMemory`、`codeTrail.aiMemoryPath` 设置和“CodeTrail: 打开 AI 解析记忆（Markdown）”命令。Skill/DSH 场景由当前 Agent 生成同类 Markdown，不额外要求 API Key。
+- 方向/上下游深度、Top-N 聚合、历史前进后退与模块视图行为保持不变。
+
 ## 0.6.0（2026-11-12）
 
 ### 新增

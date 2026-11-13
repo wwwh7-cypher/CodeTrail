@@ -80,6 +80,12 @@ table.rel-table tbody tr[data-relation-node]:hover,table.rel-table tbody tr[data
 .module-review-list .review-item{cursor:pointer}
 .module-dep-table{min-width:0}
 
+/* Expand/collapse affordance on cards: + for expandable, − for the currently expanded focus. */
+.graph-node .expand-badge{cursor:pointer;pointer-events:all}
+.graph-node .expand-badge .expand-glyph{font:600 11px var(--sans);fill:var(--accent);user-select:none}
+.graph-node .expand-badge:hover circle{fill:var(--hover)}
+.graph-node[aria-current=true] .expand-badge circle{stroke:var(--accent)}
+
 @media(max-width:760px){
   .explore-toolbar .toolbar-sep{display:none}
   .dir-switch button{font-size:10px;padding:4px 6px}

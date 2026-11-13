@@ -1,6 +1,6 @@
 # CodeTrail
 
-在 Agent 写代码之后，用模糊搜索与交互式函数调用网络帮助开发者定位、理解和复核修改。核心由 Rust 编写；独立 HTML 与 VS Code Webview 共用同一套阅读和探索逻辑。当前版本 0.6.0，发布者 `wwwh7`。
+在 Agent 写代码之后，用模糊搜索与交互式函数调用网络帮助开发者定位、理解和复核修改。核心由 Rust 编写；独立 HTML 与 VS Code Webview 共用同一套阅读和探索逻辑。当前版本 0.6.1，发布者 `wwwh7`。
 
 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wwwh7.codetrail-app)（扩展 ID `wwwh7.codetrail-app`，显示名 CodeTrail） · [下载预编译版本（GitHub Releases）](https://github.com/wwwh7-cypher/CodeTrail/releases) · [Agent Skill 入口](SKILL.md) · [验证记录与边界](VERIFICATION.md) · [发布说明](docs/RELEASING.md)
 
@@ -24,14 +24,14 @@
 
 ### 1. VS Code（Windows x64）
 
-1. 在扩展视图搜索 **CodeTrail**（publisher `wwwh7`，扩展 ID `wwwh7.codetrail-app`）从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wwwh7.codetrail-app) 安装；也可从 [Releases](https://github.com/wwwh7-cypher/CodeTrail/releases) 下载发布的 VSIX，或直接使用本地构建产物 `output/code-trail-0.6.0-win32-x64.vsix`，选择“从 VSIX 安装”。
+1. 在扩展视图搜索 **CodeTrail**（publisher `wwwh7`，扩展 ID `wwwh7.codetrail-app`）从 [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=wwwh7.codetrail-app) 安装；也可从 [Releases](https://github.com/wwwh7-cypher/CodeTrail/releases) 下载发布的 VSIX，或直接使用本地构建产物 `output/code-trail-0.6.1-win32-x64.vsix`，选择“从 VSIX 安装”。
 2. 重新加载窗口。
 3. 打开任意本地项目，运行命令 `CodeTrail: 打开架构导览`。
 4. 输入函数缩写、文件名或已有中文职责并回车；单击节点继续展开。`Ctrl+Alt+G` 在编辑器中定位当前函数。
 
 普通搜索、看图与 Git 审查不依赖模型；只有“解释此函数”需要自备 API（见下文两种模型入口）。
 
-调用图中拖动节点或空白处即可平移，单击节点查看详情。鼠标位于图内或焦点在图上时，`Ctrl + [` 缩小、`Ctrl + ]` 放大、`Ctrl + 0` 适应全图；也可用 `Ctrl + 滚轮` 缩放、`Shift + 滚轮` 平移。普通滚轮滚动页面。Mac 使用 `⌘` 替代 `Ctrl`。方向开关、上下游深度、每侧上限与关系清单等控制见下文“查看器能力”。
+调用图中拖动节点或空白处即可平移，单击节点查看详情并展开一级邻居；再次单击同一已展开节点则收起并收回本次展开的远处节点。鼠标位于图内或焦点在图上时，`Ctrl + [` 缩小、`Ctrl + ]` 放大、`Ctrl + 0` 适应全图；也可用 `Ctrl + 滚轮` 缩放、`Shift + 滚轮` 平移。普通滚轮滚动页面。Mac 使用 `⌘` 替代 `Ctrl`。方向开关、上下游深度、每侧上限与关系清单等控制见下文“查看器能力”。
 
 VS Code 分屏调整保留当前视角；窄屏下详情随页面滚动，源码跳转和 diff 复用源码编辑器组。“解释此函数”直接使用已配置的 API，不再弹出调用前确认。
 
@@ -82,6 +82,8 @@ code-trail query <output>/architecture.graph.json search "parseConfig" --limit 2
 
 **显式编码**
 
+- 单击函数展开一级邻居，再次单击同一函数收起并连带收回该次展开的远处节点（固定节点保留）；可展开节点带 `+`/`−` 角标。
+- 新展开的后置函数使用更远的连线与非遮挡布局，按卡片实际矩形避让，不覆盖已有函数。
 - 多个调用点聚合成一条边并标 `×N`；`resolution` 含 `static`/`candidate` 的调用画虚线（如 C/C++ 的 `c-include-static`、显式导入的静态候选），其余已解析调用画实线，图例常驻画布。
 - 函数卡右上角 `⚡N` 表示该函数未进入图的调用条数，点击按原因分组查看位置；检查器也会单列未解析项。未解析是静态缺口，不等于运行时不可达。
 - 模块视图用 `⇄` 高亮双向/循环依赖（同一强连通分量）；是否合理仍需人工判断。
@@ -107,6 +109,8 @@ code-trail query <output>/architecture.graph.json search "parseConfig" --limit 2
 ## 两种模型入口
 
 **VS Code（BYOK）：** 设置 Provider、API Base URL、可选 Models URL、Model ID 与 API Key；Key 保存在 SecretStorage，按协议与来源隔离。支持 OpenAI-compatible 与 Anthropic 协议。
+
+每次“解释此函数”成功后，生成的标题与职责会自动追加到工作区 `.codetrail/ai-memory.md`（可用命令 **CodeTrail: 打开 AI 解析记忆（Markdown）** 打开；设置 `codeTrail.aiMemory` 关闭、`codeTrail.aiMemoryPath` 修改路径）。这是未确认的 AI 叙述，不是已确认的稳定架构记忆；同一函数同一内容哈希会原位更新。Agent Skill 与 DSH 插件使用当前对话 Agent 生成同类 Markdown，不需要额外 API Key。
 
 **Agent Skill：** 使用当前对话模型，无需额外 Key，也不复制插件凭据。说明只描述函数职责，任何模型叙述都不会决定调用关系。
 

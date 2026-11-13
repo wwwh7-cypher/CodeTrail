@@ -9,6 +9,7 @@ import {validateConfig,keyScope,listModels,generateRoles,cacheKey,type Narrative
 import {LocalMetrics} from './metrics';
 import {semanticNeighbors} from './semantic';
 import {readChecklist,saveChecklist,reviewRevision} from './checklist';
+import {AI_MEMORY_HEADER,upsertAiMemory,type AiMemoryEntry} from './ai-memory';
 
 const exec=promisify(execFile);
 const MAX_MESSAGE=2_000_000;
@@ -113,6 +114,28 @@ export class CodeTrailHost implements vscode.Disposable {
   private async memory(args:string[]){if(!this.graph)throw new Error('请先扫描项目');return this.cli(['memory','--graph',this.graphPath,'--store',path.join(this.storage,'memory'),...args]);}
   private async current(){if(this.running)throw new Error('扫描正在进行，请等待完成后重试');if(this.stale)throw new Error('源码已变化，请先重新扫描，再确认架构记忆');if(!this.graph)throw new Error('请先扫描项目');}
   private async inputFile(text:string){const file=path.join(this.storage,`draft-${++this.draftId}.txt`);await fs.writeFile(file,text);return file;}
+  private aiMemoryFile(){const fallback=path.join(this.root,'.codetrail','ai-memory.md');if(!this.root)return fallback;const configured=vscode.workspace.getConfiguration('codeTrail').get<string>('aiMemoryPath','.codetrail/ai-memory.md');const candidate=path.resolve(this.root,configured||'.codetrail/ai-memory.md');return candidate===fallback||inside(this.root,candidate)?candidate:fallback;}
+  private async writeAiMemory(graph:Graph,roles:Map<string,Narrative>){
+    if(!this.root||!vscode.workspace.getConfiguration('codeTrail').get<boolean>('aiMemory',true))return;
+    try{
+      const file=this.aiMemoryFile(),config=this.apiConfig(),timestamp=new Date().toISOString(),project=graph.project||path.basename(this.root);
+      const entries=[...roles].map(([id,note])=>{
+        const node=graph.nodes.find(n=>n.id===id);if(!node)return undefined;
+        return {id,name:node.name,file:node.file,line:node.line,title:note.title,summary:note.summary,contentHash:node.content_hash,snapshot:graph.snapshot,project,provider:config.provider,model:config.model,timestamp} as AiMemoryEntry;
+      }).filter((value):value is AiMemoryEntry=>Boolean(value));
+      if(!entries.length)return;
+      let previous='';try{previous=await fs.readFile(file,'utf8');}catch{}
+      await fs.mkdir(path.dirname(file),{recursive:true});
+      await fs.writeFile(file,upsertAiMemory(previous,entries),'utf8');
+      this.output.appendLine(`AI 解析记忆已追加：${path.relative(this.root,file)}（${entries.length} 个函数）`);
+    }catch(error){this.output.appendLine(`AI 解析记忆写入失败：${errorText(error)}`);}
+  }
+  async openAiMemory(){
+    if(!this.root)throw new Error('请先在 VS Code 中打开本地项目文件夹');
+    const file=this.aiMemoryFile();
+    try{await fs.access(file);}catch{await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,AI_MEMORY_HEADER,'utf8');}
+    await vscode.window.showTextDocument(vscode.Uri.file(file),{preview:false});
+  }
   private async applyCachedRoles(){if(!this.graph)return;const config=this.apiConfig();let cache:Record<string,Narrative>={};try{cache=JSON.parse(await fs.readFile(path.join(this.storage,'roles.json'),'utf8'));}catch{}this.graph.viewer ||= {};this.graph.viewer.annotations ||= {};for(const node of this.graph.nodes){const note=cache[cacheKey(config,node)];if(note&&typeof note.title==='string'&&note.title.length<=60&&typeof note.summary==='string'&&note.summary.length<=400)this.graph.viewer.annotations[node.id]={...note,content_hash:node.content_hash,source:'byok-model',revision:this.graph.snapshot,confirmed:false};}}
   private async refreshNarratives(){if(!this.graph||this.disposed||this.running)return;const notes=this.graph.viewer?.annotations||{};for(const id of Object.keys(notes))if(notes[id].source==='byok-model')delete notes[id];await this.applyCachedRoles();await this.persistGraph();await this.send({type:'annotations',annotations:this.graph.viewer?.annotations||{}});}
   private async narrate(ids:string[]){
@@ -123,7 +146,7 @@ export class CodeTrailHost implements vscode.Disposable {
       const annotations=[...roles].map(([id,note])=>({id,content_hash:graph.nodes.find(n=>n.id===id)!.content_hash,...note}));
       const file=await this.inputFile(JSON.stringify({snapshot:graph.snapshot,source:'byok-model',annotations}));const validated=path.join(this.storage,'validated-annotations.graph.json');
       try{await this.cli(['annotate',this.graphPath,'--input',file,'--out',validated]);if(this.graph!==graph||this.stale||this.running)throw new Error('校验期间代码已变化，说明未应用');const checked=JSON.parse(await fs.readFile(validated,'utf8')) as Graph;graph.viewer ||= {};graph.viewer.annotations=checked.viewer?.annotations||{};}finally{await fs.unlink(file).catch(()=>{});await fs.unlink(validated).catch(()=>{});}
-      for(const [id,note]of roles)cache[cacheKey(config,graph.nodes.find(n=>n.id===id)!)]=note;cache=Object.fromEntries(Object.entries(cache).slice(-2000));await fs.writeFile(path.join(this.storage,'roles.json'),JSON.stringify(cache));await this.persistGraph();await this.send({type:'annotations',annotations:graph.viewer.annotations});await this.metrics.bump('roleRequests');
+      for(const [id,note]of roles)cache[cacheKey(config,graph.nodes.find(n=>n.id===id)!)]=note;cache=Object.fromEntries(Object.entries(cache).slice(-2000));await fs.writeFile(path.join(this.storage,'roles.json'),JSON.stringify(cache));await this.persistGraph();await this.send({type:'annotations',annotations:graph.viewer.annotations});await this.metrics.bump('roleRequests');await this.metrics.bump('byokCompleted');await this.writeAiMemory(graph,roles);
     }finally{this.aborters.delete(controller);}
   }
   async exportMcp(){if(!this.graph)await this.scan();const config={mcpServers:{'code-trail':{command:this.binary(),args:['mcp','--graph',this.graphPath,'--store',path.join(this.storage,'memory')]}}};const document=await vscode.workspace.openTextDocument({language:'json',content:JSON.stringify(config,null,2)});await vscode.window.showTextDocument(document,vscode.ViewColumn.Beside);return config;}

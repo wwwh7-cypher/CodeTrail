@@ -10,6 +10,7 @@ export function activate(context:vscode.ExtensionContext){
   register('codeTrail.settings',()=>host!.showMode('settings'));register('codeTrail.memory',()=>host!.showMode('memory'));
   register('codeTrail.claimClipboard',()=>host!.importClaim('clipboard'));register('codeTrail.claimFile',()=>host!.importClaim('file'));
   register('codeTrail.mcpConfig',()=>host!.exportMcp());register('codeTrail.metrics',()=>host!.metricsReport());register('codeTrail.clearKey',()=>host!.clearKey());
+  register('codeTrail.openAiMemory',()=>host!.openAiMemory());
   // Exported API supports extension integration tests and local tooling, not webview script execution.
   return {scan:(options?:ScanOptions)=>host!.scan(options),state:()=>host!.debugState(),config:()=>host!.publicConfig(),settings:(value:unknown)=>host!.saveConfig(value),html:()=>host!.testHtml(),openDiff:(id:string)=>host!.openDiff(id),dispose:()=>host!.dispose()};
 }

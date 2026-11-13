@@ -1,8 +1,23 @@
 # CodeTrail 验证记录
 
-更新日期：2026-11-12。发布者：`wwwh7`。扩展 ID：`wwwh7.codetrail-app`。Marketplace 0.5.1 已提交发布成功；公开页面同步可能延迟。GitHub Releases 既有资产仍为 0.5.0；2026-11-12 的模块模型与查看器改进已随 **0.6.0** 打包为 Windows x64 VSIX 并在本机 VS Code 安装验证，**尚未发布到 Marketplace 或 GitHub Releases**。
+更新日期：2026-11-13。发布者：`wwwh7`。扩展 ID：`wwwh7.codetrail-app`。Marketplace 0.5.1 已提交发布成功；公开页面同步可能延迟。GitHub Releases 既有资产仍为 0.5.0；2026-11-13 的 **0.6.1** 已打包为 Windows x64 VSIX 并在本机 VS Code 安装验证，**尚未发布到 Marketplace 或 GitHub Releases**。
 
 本文件记录开发机上的实际执行结果。表中 `output/...` 证据是本机验证产物，已被 gitignore、不随仓库分发；预编译 VSIX、Skill 与源码包通过 GitHub Releases 与 VS Code Marketplace 分发。下文分别保留 2026-11-12 的 0.6.0 构建、0.5.1 交互改进与 0.5.0 发布构建的验证结果。
+
+## 2026-11-13 0.6.1 展开/收起、无遮挡布局与 AI 解析记忆（本地 VSIX）
+
+| 检查 | 结果 | 可核对证据 |
+| --- | --- | --- |
+| 最终二进制 | `bin/code-trail.exe`，2026-11-13 12:00:34，15,287,808 字节，SHA-256 `D666FDA587431FD4436A73C4ADAB72684FCC9F34ADA66ADBF890E12116B6C2A7`，版本 `code-trail 0.6.1` | 构建产物，不随仓库分发 |
+| Rust 测试 | `cargo test --locked`：lib 40 + `tests/cli.rs` 10 + `tests/workflows.rs` 16 = 66 passed，0 failed | 本机 cargo 输出 |
+| 浏览器回归 | `node scripts/verify-explorer.cjs --final-architecture output/e2e-final/architecture.html --final-review output/e2e-final/review.html`：**27/27 checks passed，consoleErrors=[]**；真实 0.6.1 产物为 1,033 函数 / 913 边 / 36 文件 / 4,279 未解析，review 为 502 个变更函数 / 774 处 Git 变更 | `output/browser-test/evidence.json` |
+| 原生 CLI 与 MCP | `node scripts/verify-native.mjs` exit 0（MCP stdio initialize/list/search/neighbors 通过） | 本机运行输出 |
+| AI 解析记忆 | `npm --prefix extension run test:unit`：7/7 通过（新增 4 项 `ai-memory` 测试：新文件、同函数原位更新、多快照/多函数保留、marker 注入中和）；VSIX 内含 `out/ai-memory.js`；命令与 `codeTrail.aiMemory` / `codeTrail.aiMemoryPath` 设置已注册 | 本机测试输出；VSIX 内容 |
+| VSIX 打包与安装 | `npm --prefix extension run package` 生成 `output/code-trail-0.6.1-win32-x64.vsix`（4,072,197 字节 / 17 个文件，SHA-256 `77800DDDBFED438F77FA9BBE6ACC42C5D367847E72CD55301F68839089752EAA`）；内嵌二进制 SHA-256 与 `bin/code-trail.exe` 一致；`viewer.html` 含 `expandStack` / `collidesRect` / `expand-badge`；`code --install-extension` 后显示 `wwwh7.codetrail-app@0.6.1` | `output/code-trail-0.6.1-win32-x64.vsix` |
+
+行为摘要：单击函数展开，再次单击同一已展开函数收起并整栈回退（远处节点连带收回，pins 保留，焦点/聚合卡恢复）；后置节点按卡片矩形避让并沿入/出方向向外放置，已有节点坐标不移动；BYOK “解释此函数”成功后自动写 `.codetrail/ai-memory.md`（未确认 AI 叙述，同一函数同一内容哈希原位更新）。Skill/DSH 场景由当前 Agent 生成同类 Markdown，不需要额外 API Key。
+
+未覆盖边界：无真人视觉验收；未运行真实 VS Code Webview 宿主（沿用桥接断言）；未在真实大型仓库压测；未发布 Marketplace/GitHub Release。
 
 ## 2026-11-12 模块模型与查看器改进（0.6.0 本地 VSIX，未发布 Marketplace）
 

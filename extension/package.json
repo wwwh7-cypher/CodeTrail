@@ -2,7 +2,7 @@
   "name": "codetrail-app",
   "displayName": "CodeTrail — 架构导览与 AI 修改审查",
   "description": "Rust 静态代码图：入口路径、Git 修改影响、BYOK 职责叙述与有界架构记忆。",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "publisher": "wwwh7",
   "engines": {
     "vscode": "^1.100.0"
@@ -74,6 +74,10 @@
       {
         "command": "codeTrail.clearKey",
         "title": "CodeTrail: 删除当前 API Key"
+      },
+      {
+        "command": "codeTrail.openAiMemory",
+        "title": "CodeTrail: 打开 AI 解析记忆（Markdown）"
       }
     ],
     "configuration": {
@@ -131,6 +135,16 @@
           "type": "boolean",
           "default": true,
           "description": "只在本机保存使用计数：7 天复用、BYOK 配置、扫描和错误次数。无远程遥测。"
+        },
+        "codeTrail.aiMemory": {
+          "type": "boolean",
+          "default": true,
+          "description": "每次“解释此函数”成功后，把 AI 叙述追加到工作区的 Markdown 记忆文件（未确认内容，不是稳定架构记忆）。"
+        },
+        "codeTrail.aiMemoryPath": {
+          "type": "string",
+          "default": ".codetrail/ai-memory.md",
+          "description": "AI 解析记忆 Markdown 路径；相对路径按工作区根目录解析，必须位于工作区内。"
         }
       }
     },

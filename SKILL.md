@@ -37,7 +37,7 @@ Check the returned files/functions/edges/diagnostics and graph snapshot. HTML an
 
 The HTML viewer shows the same model as explicit encodings: `×N` on aggregated call sites, solid vs dashed (static/candidate) edge styles, `⚡N` unresolved badges with a reason breakdown, direction switch plus upstream/downstream depth, a per-side Top-N limit with an aggregate "remaining K" card, compact cards/LOD, graph-derived scope filtering, hidden anonymous callbacks/test files, an inspector "relations" tab (callers/callees/unresolved, sortable, copyable JSON, evidence), entry grouping with hop distance to the nearest entry, and module metrics, full dependency table, cycle highlighting and overall dependency. These are presentation of the static graph: entry groups and distances are heuristic candidates, and no display control creates or removes an edge.
 
-The HTML opens without a server. Search supports arrow keys and Enter, Ctrl/Cmd K. Click a node to expand its first-order callers/callees and focus it, retaining prior coordinates. Back/forward, pinning, collapse, module aggregation, scope, reduced motion and SVG export are available. Module edges aggregate only actual resolved calls; they do not imply cross-service HTTP invocation. The offline source button shows the embedded excerpt; the VS Code edition opens the editor.
+The HTML opens without a server. Search supports arrow keys and Enter, Ctrl/Cmd K. Click a node to expand its first-order callers/callees and focus it, retaining prior coordinates; click the same expanded node again to collapse it and retract the nodes that expansion added (pins stay). Newly expanded nodes are placed with longer, non-overlapping edges so they do not cover existing cards. Back/forward, pinning, collapse, module aggregation, scope, reduced motion and SVG export are available. Module edges aggregate only actual resolved calls; they do not imply cross-service HTTP invocation. The offline source button shows the embedded excerpt; the VS Code edition opens the editor.
 
 ## C/C++ notes
 
@@ -60,7 +60,30 @@ code-trail annotate <graph.json> --input <annotations.json> --out <graph.json>
 code-trail render <graph.json> --out <architecture.html>
 ```
 
-The validator rejects stale snapshots/hashes, unknown or repeated symbols, unknown fields, titles over 60 characters and summaries over 400 characters. Re-scanning into the same graph path reuses validated narratives only for unique stable symbols with unchanged function content; changed functions expire. Refer to [the annotation contract](references/annotation-contract.md).
+The validator rejects stale snapshots/hashes, unknown or repeated symbols, unknown fields, titles over 60 characters and summaries over 400 characters. Re-scanning into the same graph path reuses validated narratives only for unique stable symbols with unchanged function content; changed functions expire. Refer to [the annotation contract](references/annotation-contract.md). This path uses the current conversation model only: do not ask for an API key, never drop unresolved evidence, and never add or infer call edges from prose.
+
+### AI analysis memory Markdown
+
+After a successful `annotate`, append the validated narratives to a Markdown memo for later turns (the DSH plugin does this automatically; in a plain skill session write the file yourself with the file-write tool). Put it next to the output, e.g. `<output>/ai-memory.md`:
+
+```text
+# CodeTrail AI 解析记忆
+
+> 未确认的 AI 叙述，不是已确认的稳定架构记忆，也不改变调用关系。
+
+<!-- code-trail-ai:<exact-id>:<content_hash> -->
+### <标题（≤60 字）>
+
+- 函数：`<name>`（`<file>:<line>`）
+- 稳定 ID：`<exact-id>`
+- 快照：`<snapshot 前 16 位> · <project> · <content_hash 前 32 位>`
+- 来源：conversation-model（当前 Agent）
+- 时间：<RFC3339>
+
+<摘要（≤400 字）>
+```
+
+One marked block per function; rewrite that block instead of duplicating it when the same function/content hash is re-analyzed. Keep this separate from the confirmed bounded memory below. The VS Code extension generates the same records with the customer's BYOK API key and writes `.codetrail/ai-memory.md` in the workspace automatically.
 
 For a scoped example, set `viewer.scope` to a real relative path, `viewer.target` to a real function ID, and optional `viewer.module_groups` to `[{name,prefix}]`; render again. These settings alter display only. Native `module_depth`/`module_groups` (written by `scan`/`review`) define the graph's module keys; `viewer.module_groups` is a display-only override for that render. Do not remove unresolved evidence to make the graph appear more complete.
 
